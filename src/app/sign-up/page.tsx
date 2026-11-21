@@ -13,10 +13,10 @@ export default async function SignUp() {
   const existing = await session();
   if (existing) redirect(homeFor(existing.profile.role));
   const enabled = !!publicConfig();
-  return <AuthLayout title="Create your account" description="Sign up with your Ashoka University email and a password.">
+  return <AuthLayout title="Create your account" description="Create an account with your Ashoka University email and password.">
     {!enabled && <div className="notice" role="status">Account creation is unavailable until the portal is connected to Supabase.</div>}
     {enabled && <>
-      <p className="auth-hint">Use your @{authorizedDomain()} address. You&apos;ll confirm it by email before signing in.</p>
+      <p className="auth-hint">Create your account with your @{authorizedDomain()} email and a password. You can sign in right away.</p>
       <PasswordSignUpForm domain={authorizedDomain()} enabled={enabled} />
     </>}
     <small>Already have an account? <Link href="/sign-in">Sign in</Link></small>

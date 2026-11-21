@@ -88,22 +88,22 @@ describe("server guards", () => {
     expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
   });
 
-  it("registers campus accounts with email confirmation and a non-enumerating response", async () => {
+  it("creates and signs in campus accounts without email-link verification", async () => {
     const signUp = vi.fn().mockResolvedValue({
       data: { session: null, user: { id: studentId, email: "test@ashoka.edu.in" } }, error: null,
     });
-    userDb.mockResolvedValue({ auth: { signUp } });
+    const signInWithPassword = vi.fn().mockResolvedValue({ error: null });
+    const adminConfirm = vi.fn().mockResolvedValue({ error: null });
+    userDb.mockResolvedValue({ auth: { signUp, signInWithPassword } });
+    serviceDb.mockReturnValue({ auth: { admin: { updateUserById: adminConfirm } } });
     const form = new FormData();
     form.set("email", "test@ashoka.edu.in");
     form.set("password", "correct-horse-battery");
     form.set("confirm_password", "correct-horse-battery");
-    expect(await signUpPassword({}, form)).toEqual({
-      success: "If this campus account can be registered, check your inbox for a confirmation link.",
-    });
-    expect(signUp).toHaveBeenCalledWith(expect.objectContaining({
-      email: "test@ashoka.edu.in", password: "correct-horse-battery",
-      options: { emailRedirectTo: `${origin}/auth/callback` },
-    }));
+    await expect(signUpPassword({}, form)).rejects.toThrow("redirect:/projects");
+    expect(signUp).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
+    expect(adminConfirm).toHaveBeenCalledWith(studentId, { email_confirm: true });
+    expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
   });
 
   it("keeps demo requests away from authentication, storage, export and the worker even with credentials configured", async () => {
