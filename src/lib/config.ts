@@ -20,10 +20,6 @@ export function publicConfig() {
   return url && key ? { url, key } : null;
 }
 
-export function magicLinkEnabled() {
-  return !!publicConfig() && process.env.EMAIL_MAGIC_LINK_ENABLED !== "false";
-}
-
 export function appUrl() {
   return new URL(process.env.APP_URL || "http://localhost:3000").origin;
 }

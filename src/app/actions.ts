@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth";
-import { allowedEmail, appUrl, authorizedDomain, magicLinkEnabled, publicConfig } from "@/lib/config";
+import { homeFor, requireSession } from "@/lib/auth";
+import { allowedEmail, appUrl, authorizedDomain, publicConfig } from "@/lib/config";
 import { serviceDb, userDb } from "@/lib/db";
 import { relevantCriteria } from "@/lib/evaluation";
 import { databaseMessage } from "@/lib/http";
@@ -12,16 +12,62 @@ import { decisionSchema, idSchema, profileSchema, projectSchema } from "@/lib/sc
 
 export type FormState = { error?: string; success?: string };
 
-export async function sendMagicLink(_: FormState, form: FormData): Promise<FormState> {
-  if (!magicLinkEnabled()) return { error: "Email sign-in is unavailable." };
+function passwordFormValues(form: FormData) {
   const email = z.email().safeParse(String(form.get("email") || "").trim().toLowerCase());
+  const password = z.string().min(1).max(72).safeParse(form.get("password"));
+  return { email, password };
+}
+
+function passwordAuthError(error: { code?: string; status?: number }) {
+  if (error.code === "email_not_confirmed") return "Confirm your campus email from the link we sent before signing in.";
+  if (error.code === "weak_password") return "Choose a stronger password and try again.";
+  if (error.status === 429) return "Too many attempts. Wait a little while before trying again.";
+  if (error.code === "invalid_credentials") return "Invalid email or password.";
+  return "We couldn’t complete sign-in right now. Please try again.";
+}
+
+export async function signInPassword(_: FormState, form: FormData): Promise<FormState> {
+  if (!publicConfig()) return { error: "Password sign-in is unavailable." };
+  const { email, password } = passwordFormValues(form);
   if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  if (!password.success) return { error: "Enter your password." };
   const db = await userDb();
-  const { error } = await db.auth.signInWithOtp({
-    email: email.data, options: { emailRedirectTo: `${appUrl()}/auth/callback` },
+  const { data, error } = await db.auth.signInWithPassword({ email: email.data, password: password.data });
+  if (error || !data.user) return { error: passwordAuthError(error || {}) };
+  if (!data.user.email_confirmed_at || !allowedEmail(data.user.email)) {
+    await db.auth.signOut({ scope: "local" });
+    return { error: "Confirm your campus email from the link we sent before signing in." };
+  }
+  const { data: profile, error: profileError } = await db.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
+  if (profileError || !profile) {
+    await db.auth.signOut({ scope: "local" });
+    return { error: "We couldn’t load your account. Please try again." };
+  }
+  redirect(homeFor(profile.role));
+}
+
+export async function signUpPassword(_: FormState, form: FormData): Promise<FormState> {
+  if (!publicConfig()) return { error: "Account creation is unavailable." };
+  const { email, password } = passwordFormValues(form);
+  const confirmation = String(form.get("confirm_password") || "");
+  if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  if (!password.success || password.data.length < 8) return { error: "Use a password with at least 8 characters." };
+  if (password.data !== confirmation) return { error: "The passwords do not match." };
+  const db = await userDb();
+  const { data, error } = await db.auth.signUp({
+    email: email.data,
+    password: password.data,
+    options: {
+      emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${appUrl()}/auth/callback`,
+    },
   });
-  if (error) return { error: "We couldn’t send a sign-in link. Wait a minute and try again." };
-  return { success: "Check your campus inbox for a sign-in link. Open it in this browser." };
+  if (error) {
+    if (error.code === "weak_password") return { error: "Choose a stronger password and try again." };
+    if (error.status === 429) return { error: "Too many attempts. Wait a little while before trying again." };
+    return { error: "We couldn’t create your account. Check your details and try again." };
+  }
+  if (data.session && data.user && allowedEmail(data.user.email)) redirect("/projects");
+  return { success: "If this campus account can be registered, check your inbox for a confirmation link." };
 }
 
 export async function signInGoogle() {

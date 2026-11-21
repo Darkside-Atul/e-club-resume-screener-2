@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowRight, LoaderCircle } from "lucide-react";
-import { retryScreening, saveDecision, sendMagicLink, updateProfile } from "@/app/actions";
+import { retryScreening, saveDecision, signInPassword, signUpPassword, updateProfile } from "@/app/actions";
 import { decisions } from "@/lib/schema";
 import { decisionLabel } from "@/lib/format";
 import type { Profile, Review } from "@/lib/types";
@@ -18,13 +18,24 @@ export function SubmitButton({ children, busy = "Saving…", secondary = false }
   </button>;
 }
 
-export function MagicForm({ domain, enabled }: { domain: string; enabled: boolean }) {
-  const [state, action] = useActionState(sendMagicLink, {});
+export function PasswordSignInForm({ domain, enabled }: { domain: string; enabled: boolean }) {
+  const [state, action] = useActionState(signInPassword, {});
   return <form action={action} className="form-stack">
     <label>Campus email <input name="email" type="email" required autoComplete="email" placeholder={`name@${domain}`} disabled={!enabled} maxLength={254} /></label>
+    <label>Password <input name="password" type="password" required autoComplete="current-password" minLength={1} maxLength={72} disabled={!enabled} /></label>
     <Notice state={state} />
-    {enabled ? <SubmitButton busy="Sending link…">Email me a sign-in link <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
-      : <button className="button" disabled type="button">Email me a sign-in link <ArrowRight size={17} aria-hidden="true" /></button>}
+    <SubmitButton busy="Signing in…">Sign in <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
+  </form>;
+}
+
+export function PasswordSignUpForm({ domain, enabled }: { domain: string; enabled: boolean }) {
+  const [state, action] = useActionState(signUpPassword, {});
+  return <form action={action} className="form-stack">
+    <label>Campus email <input name="email" type="email" required autoComplete="email" placeholder={`name@${domain}`} disabled={!enabled} maxLength={254} /></label>
+    <label>Password <input name="password" type="password" required autoComplete="new-password" minLength={8} maxLength={72} disabled={!enabled} /></label>
+    <label>Confirm password <input name="confirm_password" type="password" required autoComplete="new-password" minLength={8} maxLength={72} disabled={!enabled} /></label>
+    <Notice state={state} />
+    <SubmitButton busy="Creating account…">Create account <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
   </form>;
 }
 
