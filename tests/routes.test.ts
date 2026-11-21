@@ -11,7 +11,7 @@ const { userDb, serviceDb, redirect } = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ userDb, serviceDb }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-import { sendMagicLink } from "@/app/actions";
+import { signInPassword, signUpPassword } from "@/app/actions";
 import { POST as screen } from "@/app/api/internal/screen/route";
 import { GET as callback } from "@/app/auth/callback/route";
 import { requireSession } from "@/lib/auth";
@@ -53,7 +53,6 @@ beforeEach(() => {
   vi.unstubAllGlobals();
   vi.stubEnv("APP_URL", origin);
   vi.stubEnv("DEMO_MODE", "false");
-  vi.stubEnv("EMAIL_MAGIC_LINK_ENABLED", "true");
   vi.stubEnv("AUTHORIZED_EMAIL_DOMAIN", "ashoka.edu.in");
   vi.stubEnv("MAX_RESUME_MB", "10");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://database.example.invalid");
@@ -61,12 +60,50 @@ beforeEach(() => {
 });
 
 describe("server guards", () => {
-  it("blocks magic link requests when email delivery is disabled", async () => {
-    vi.stubEnv("EMAIL_MAGIC_LINK_ENABLED", "false");
+  it("restricts password sign-in and registration to campus email addresses", async () => {
+    const signInForm = new FormData();
+    signInForm.set("email", "test@example.com");
+    signInForm.set("password", "correct-horse-battery");
+    expect(await signInPassword({}, signInForm)).toEqual({ error: "Enter a valid @ashoka.edu.in email address." });
+
+    const signUpForm = new FormData();
+    signUpForm.set("email", "test@ashoka.edu.in");
+    signUpForm.set("password", "short");
+    signUpForm.set("confirm_password", "short");
+    expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Use a password with at least 8 characters." });
+    expect(userDb).not.toHaveBeenCalled();
+  });
+
+  it("signs in with a password and routes by the server-owned profile role", async () => {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: { role: "reviewer" }, error: null });
+    const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle };
+    const signInWithPassword = vi.fn().mockResolvedValue({
+      data: { user: { id: studentId, email: "test@ashoka.edu.in", email_confirmed_at: "confirmed" } }, error: null,
+    });
+    userDb.mockResolvedValue({ auth: { signInWithPassword, signOut: vi.fn() }, from: vi.fn().mockReturnValue(query) });
     const form = new FormData();
     form.set("email", "test@ashoka.edu.in");
-    expect(await sendMagicLink({}, form)).toEqual({ error: "Email sign-in is unavailable." });
-    expect(userDb).not.toHaveBeenCalled();
+    form.set("password", "correct-horse-battery");
+    await expect(signInPassword({}, form)).rejects.toThrow("redirect:/reviewer");
+    expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
+  });
+
+  it("registers campus accounts with email confirmation and a non-enumerating response", async () => {
+    const signUp = vi.fn().mockResolvedValue({
+      data: { session: null, user: { id: studentId, email: "test@ashoka.edu.in" } }, error: null,
+    });
+    userDb.mockResolvedValue({ auth: { signUp } });
+    const form = new FormData();
+    form.set("email", "test@ashoka.edu.in");
+    form.set("password", "correct-horse-battery");
+    form.set("confirm_password", "correct-horse-battery");
+    expect(await signUpPassword({}, form)).toEqual({
+      success: "If this campus account can be registered, check your inbox for a confirmation link.",
+    });
+    expect(signUp).toHaveBeenCalledWith(expect.objectContaining({
+      email: "test@ashoka.edu.in", password: "correct-horse-battery",
+      options: { emailRedirectTo: `${origin}/auth/callback` },
+    }));
   });
 
   it("keeps demo requests away from authentication, storage, export and the worker even with credentials configured", async () => {

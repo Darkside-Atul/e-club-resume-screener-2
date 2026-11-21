@@ -177,6 +177,9 @@ summary { font-weight: 700; }
 .sign-form-inner p { margin-top: -.3rem; margin-bottom: .7rem; }
 .sign-form-inner .button { width: 100%; min-height: 47px; }
 .sign-form-inner > small { color: var(--muted); }
+.sign-form-inner > small a { color: #245879; font-weight: 700; text-underline-offset: 3px; }
+.sign-form-inner > small a:hover { text-decoration: underline; }
+.auth-hint { font-size: .84rem; }
 .divider { color: var(--muted); display: flex; gap: .65rem; align-items: center; font-size: .8rem; }
 .divider:before, .divider:after { content: ""; height: 1px; flex: 1; background: var(--line); }
 
