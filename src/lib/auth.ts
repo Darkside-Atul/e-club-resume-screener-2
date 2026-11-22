@@ -14,15 +14,15 @@ export const session = cache(async () => {
   const { data, error } = await db.from("profiles")
     .select("id,email,name,student_id,role").eq("id", user.id).maybeSingle();
   if (error) throw new Error("profile_lookup_failed");
-  if (!data) return null;
+  if (!data || data.role !== "reviewer") return null;
   return { db, profile: data as Profile };
 });
 
 export function homeFor(role: Profile["role"]) {
-  return role === "reviewer" ? "/reviewer" : "/projects";
+  return role === "reviewer" ? "/reviewer" : "/sign-in";
 }
 
-export async function requireSession(role?: Profile["role"]) {
+export async function requireSession(role: Profile["role"] = "reviewer") {
   const current = await session();
   if (!current) redirect("/sign-in");
   if (role && current.profile.role !== role) redirect(homeFor(current.profile.role));

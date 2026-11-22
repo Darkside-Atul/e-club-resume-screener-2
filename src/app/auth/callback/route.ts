@@ -15,5 +15,10 @@ export async function GET(request: Request) {
     await db.auth.signOut({ scope: "local" });
     return target("/sign-in?error=domain");
   }
+  const { data: profile } = await db.from("profiles").select("role").eq("id", result.data.user.id).maybeSingle();
+  if (profile?.role !== "reviewer") {
+    await db.auth.signOut({ scope: "local" });
+    return target("/sign-in?error=internal");
+  }
   return target("/");
 }
