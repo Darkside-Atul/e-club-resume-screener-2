@@ -108,9 +108,9 @@ function finish(job: Lease, result: typeof output | null, error: string | null =
 }
 
 describe("campus auth and row-level access", () => {
-  it("creates applicants regardless of user metadata and blocks role escalation or foreign email", async () => {
+  it("keeps applicant accounts outside the internal reviewer workspace", async () => {
     const user = await actor();
-    expect(await as("authenticated", user, "select role from profiles")).toEqual([{ role: "applicant" }]);
+    expect(await as("authenticated", user, "select role from profiles")).toEqual([]);
     await expect(as("authenticated", user, "update profiles set role='reviewer' where id=$1", [user])).rejects.toThrow(/permission denied/);
     await expect(sql("insert into auth.users (id,email) values ($1,'external@example.invalid')", [randomUUID()]))
       .rejects.toThrow("campus_account_required");
@@ -122,7 +122,7 @@ describe("campus auth and row-level access", () => {
     const otherReviewer = await actor(true);
     const otherStudent = await actor();
     expect(await as("authenticated", otherStudent, "select id from applications where id=$1", [application])).toEqual([]);
-    expect(await as("authenticated", student, "select id from applications where id=$1", [application])).toEqual([{ id: application }]);
+    expect(await as("authenticated", student, "select id from applications where id=$1", [application])).toEqual([]);
     expect(await as("authenticated", otherReviewer, "select id from projects where id=$1", [projectId])).toEqual([]);
     expect(await as("authenticated", reviewer, "select id from projects where id=$1", [projectId])).toEqual([{ id: projectId }]);
     expect(await as("authenticated", student, "select * from project_rubrics where project_id=$1", [projectId])).toEqual([]);
@@ -146,6 +146,27 @@ describe("campus auth and row-level access", () => {
 });
 
 describe("application and queue transactions", () => {
+  it("imports applicants without login accounts and freezes the project scoring snapshot", async () => {
+    const reviewer = await actor(true);
+    const student = await actor();
+    const projectId = await project(reviewer);
+    const path = (await service<{ path: string }>("select begin_internal_resume_upload($1,$2) as path", [reviewer, projectId]))[0].path;
+    const application = (await service<{ id: string }>(
+      "select import_applicant($1,$2,$3,$4,$5,$6,$7) as id",
+      [reviewer, projectId, path, "Imported Applicant", "imported@example.edu", "STU-1", ["Robotics", "Design"]],
+    ))[0].id;
+    expect(await service("select user_id,applicant_name,applicant_email,applicant_student_id,applicant_interests from applications where id=$1", [application]))
+      .toEqual([{ user_id: null, applicant_name: "Imported Applicant", applicant_email: "imported@example.edu", applicant_student_id: "STU-1", applicant_interests: ["Robotics", "Design"] }]);
+    expect(await service("select status from screening_jobs where application_id=$1", [application])).toEqual([{ status: "queued" }]);
+    expect(await as("authenticated", reviewer, "select name,email from ranked_applications where id=$1", [application]))
+      .toEqual([{ name: "Imported Applicant", email: "imported@example.edu" }]);
+    expect(await as("authenticated", student, "select id from applications where id=$1", [application])).toEqual([]);
+    await expect(service("select import_applicant($1,$2,$3,$4,$5,$6,$7)",
+      [reviewer, projectId, path, "Imported Applicant", "imported@example.edu", "STU-1", ["Robotics"]]))
+      .rejects.toThrow("duplicate_applicant");
+    await expect(service("update projects set yes_threshold=85 where id=$1", [projectId])).rejects.toThrow("rubric_frozen");
+  });
+
   it("persists rubric versions before the first submission and locks criteria afterwards", async () => {
     const reviewer = await actor(true);
     const student = await actor();

@@ -26,7 +26,11 @@ export interface Rubric {
 export interface Application {
   id: string;
   project_id: string;
-  user_id: string;
+  user_id: string | null;
+  applicant_name: string | null;
+  applicant_email: string | null;
+  applicant_student_id: string | null;
+  applicant_interests: string[];
   resume_path: string;
   answers: string[];
   links: string[];

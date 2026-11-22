@@ -49,14 +49,10 @@ export function ProjectEditor({ project, rubric, past = false }: { project?: Pro
         <label>Eligibility requirements <span className="optional">Optional</span>
           <textarea {...field("requirements")} rows={4} maxLength={2500} /></label>
       </div>
-      <label>Applicant questions <span className="optional">Optional</span>
-        <textarea {...field("questions")} rows={4} maxLength={1450} readOnly={locked} />
-        <small>One question per line, up to 6. Applicants must answer every question you add.</small>
-      </label>
     </section>
     <section className="panel card form-stack">
       <header className="section-heading"><h2>Screening rubric</h2>{rubric && <span className="pill">Version {rubric.version}</span>}</header>
-      {locked ? <div className="notice"><LockKeyhole size={17} aria-hidden="true" /> The first submission locked this rubric and the application questions.</div>
+      {locked ? <div className="notice"><LockKeyhole size={17} aria-hidden="true" /> Imported applicants use this scoring snapshot, so the rubric is locked.</div>
         : <p className="muted">Each weight sets a criterion’s share of the score. The rubric locks when the first application arrives.</p>}
       {rows.map((row, index) => <fieldset key={row.id || "initial"} className="rubric-row" disabled={locked}>
         <legend>Criterion {index + 1}</legend>
@@ -88,13 +84,13 @@ export function ProjectEditor({ project, rubric, past = false }: { project?: Pro
       <small className="muted">Scores below the Maybe threshold are grouped under No.</small>
     </section>
     <section className="panel card form-stack">
-      <h2>Publishing</h2>
+      <h2>Project status</h2>
       <div className="form-grid">
         <label>Application deadline (IST) <input {...field("deadline")} type="datetime-local"
           readOnly={project?.status === "closed" || (locked && past)} required /></label>
         <label>Status <select {...field("status")}>
           <option value="draft" disabled={project?.status === "closed"}>Draft</option>
-          <option value="published" disabled={project?.status === "closed" || (locked && past)}>Published</option>
+          <option value="published" disabled={project?.status === "closed" || (locked && past)}>Active</option>
           <option value="closed">Closed</option>
         </select></label>
       </div>

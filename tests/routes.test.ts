@@ -13,6 +13,8 @@ vi.mock("next/navigation", () => ({ redirect }));
 
 import { signInPassword, signUpPassword } from "@/app/actions";
 import { POST as screen } from "@/app/api/internal/screen/route";
+import { POST as internalImportStart } from "@/app/api/internal/import/start/route";
+import { POST as internalImportComplete } from "@/app/api/internal/import/complete/route";
 import { GET as callback } from "@/app/auth/callback/route";
 import { requireSession } from "@/lib/auth";
 import { POST as start } from "@/app/api/uploads/start/route";
@@ -70,7 +72,7 @@ describe("server guards", () => {
     signUpForm.set("email", "test@ashoka.edu.in");
     signUpForm.set("password", "short");
     signUpForm.set("confirm_password", "short");
-    expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Use a password with at least 8 characters." });
+    expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." });
     expect(userDb).not.toHaveBeenCalled();
   });
 
@@ -88,22 +90,16 @@ describe("server guards", () => {
     expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
   });
 
-  it("creates and signs in campus accounts without email-link verification", async () => {
-    const signUp = vi.fn().mockResolvedValue({
-      data: { session: null, user: { id: studentId, email: "test@ashoka.edu.in" } }, error: null,
-    });
-    const signInWithPassword = vi.fn().mockResolvedValue({ error: null });
-    const adminConfirm = vi.fn().mockResolvedValue({ error: null });
-    userDb.mockResolvedValue({ auth: { signUp, signInWithPassword } });
-    serviceDb.mockReturnValue({ auth: { admin: { updateUserById: adminConfirm } } });
+  it("keeps student account creation disabled", async () => {
     const form = new FormData();
-    form.set("email", "test@ashoka.edu.in");
+    form.set("email", "student@ashoka.edu.in");
     form.set("password", "correct-horse-battery");
     form.set("confirm_password", "correct-horse-battery");
-    await expect(signUpPassword({}, form)).rejects.toThrow("redirect:/projects");
-    expect(signUp).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
-    expect(adminConfirm).toHaveBeenCalledWith(studentId, { email_confirm: true });
-    expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
+    expect(await signUpPassword({}, form)).toEqual({
+      error: "Account creation is disabled. Contact an authorized E-Club reviewer for access.",
+    });
+    expect(userDb).not.toHaveBeenCalled();
+    expect(serviceDb).not.toHaveBeenCalled();
   });
 
   it("keeps demo requests away from authentication, storage, export and the worker even with credentials configured", async () => {
@@ -123,7 +119,7 @@ describe("server guards", () => {
 
   it("routes an authenticated applicant away from reviewer pages", async () => {
     claim("applicant");
-    await expect(requireSession("reviewer")).rejects.toThrow("redirect:/projects");
+    await expect(requireSession("reviewer")).rejects.toThrow("redirect:/sign-in");
   });
 
   it("requires a confirmed campus email even if a profile exists", async () => {
@@ -152,56 +148,46 @@ describe("server guards", () => {
   });
 });
 
-describe("upload API", () => {
-  it("rejects cross-origin requests, non-PDF MIME types and oversized uploads before issuing a signed upload", async () => {
+describe("reviewer-only resume import", () => {
+  it("rejects the retired student upload endpoints", async () => {
     claim("applicant");
-    const body = { projectId, size: 200, mediaType: "application/pdf" };
-    expect((await start(post("/api/uploads/start", body, "https://other.example.invalid"))).status).toBe(403);
-    expect((await start(post("/api/uploads/start", { ...body, mediaType: "image/png" }))).status).toBe(400);
-    expect((await start(post("/api/uploads/start", { ...body, size: 10485761 }))).status).toBe(413);
+    expect((await start(post("/api/uploads/start", { projectId, size: 200, mediaType: "application/pdf" }))).status).toBe(403);
+    expect((await submit(post("/api/uploads/submit", {}))).status).toBe(403);
     expect(serviceDb).not.toHaveBeenCalled();
   });
 
-  it("issues a signed non-upserting upload for the authenticated applicant", async () => {
-    claim("applicant");
+  it("creates a private, non-upserting ticket for an authorized reviewer", async () => {
+    claim("reviewer");
     const createSignedUploadUrl = vi.fn().mockResolvedValue({ data: { token: "test-only-token" } });
     const rpc = vi.fn().mockResolvedValue({ data: path });
     serviceDb.mockReturnValue({ rpc, storage: { from: () => ({ createSignedUploadUrl }) } });
-    const response = await start(post("/api/uploads/start", { projectId, size: 200, mediaType: "application/pdf" }));
+    const response = await internalImportStart(post("/api/internal/import/start", {
+      projectId, size: 200, mediaType: "application/pdf", name: "Imported Applicant",
+      email: "candidate@example.edu", studentId: "A-123", interests: ["Robotics"],
+    }));
     expect(await response.json()).toEqual({ path, token: "test-only-token" });
-    expect(rpc).toHaveBeenCalledWith("begin_resume_upload", { p_user: studentId, p_project: projectId });
+    expect(rpc).toHaveBeenCalledWith("begin_internal_resume_upload", { p_reviewer: studentId, p_project: projectId });
     expect(createSignedUploadUrl).toHaveBeenCalledWith(path, { upsert: false });
   });
 
-  function storageResponse(bytes: Uint8Array | string) {
-    claim("applicant");
-    const rpc = vi.fn().mockResolvedValue({ data: applicationId });
+  it("validates a PDF before creating an authless imported applicant", async () => {
+    claim("reviewer");
+    const rpc = vi.fn().mockResolvedValue({ data: applicationId, error: null });
     const ticket = {
       select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(),
-      maybeSingle: vi.fn().mockResolvedValue({ data: { created_at: new Date().toISOString(), finalized_at: null } }),
+      maybeSingle: vi.fn().mockResolvedValue({ data: { created_at: new Date().toISOString(), finalized_at: null }, error: null }),
     };
-    const bucket = { createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: "https://storage.example.invalid/signed" } }) };
+    const bucket = { createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: "https://storage.example.invalid/signed" }, error: null }) };
     serviceDb.mockReturnValue({ rpc, from: () => ticket, storage: { from: () => bucket } });
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async () =>
-      new Response(typeof bytes === "string" ? bytes : Uint8Array.from(bytes), { headers: { "content-type": "application/pdf" } })));
-    return rpc;
-  }
-
-  const submitted = { projectId, path, expectedVersion: 0, questions: [], answers: [], links: [] };
-
-  it("validates real PDF bytes before persisting the application", async () => {
-    const rpc = storageResponse(fixturePdf());
-    const response = await submit(post("/api/uploads/submit", submitted));
+      new Response(Uint8Array.from(fixturePdf()), { headers: { "content-type": "application/pdf" } })));
+    const response = await internalImportComplete(post("/api/internal/import/complete", {
+      projectId, path, name: "Imported Applicant", email: "candidate@example.edu", studentId: "A-123", interests: ["Robotics"],
+    }));
     expect(await response.json()).toEqual({ id: applicationId });
-    expect(rpc).toHaveBeenCalledWith("submit_resume", {
-      p_user: studentId, p_project: projectId, p_path: path, p_expected_version: 0,
-      p_question_snapshot: [], p_answers: [], p_links: [],
+    expect(rpc).toHaveBeenCalledWith("import_applicant", {
+      p_reviewer: studentId, p_project: projectId, p_path: path, p_name: "Imported Applicant",
+      p_email: "candidate@example.edu", p_student_id: "A-123", p_interests: ["Robotics"],
     });
-  });
-
-  it("rejects fake PDF bytes despite a PDF content type and never commits the application", async () => {
-    const rpc = storageResponse("%PDF-1.7\nrogue data\n%%EOF\n");
-    expect((await submit(post("/api/uploads/submit", submitted))).status).toBe(415);
-    expect(rpc).not.toHaveBeenCalled();
   });
 });

@@ -2,8 +2,10 @@ import Link from "next/link";
 import { ArrowUpRight, CalendarDays, Download, Pencil, Search, UsersRound } from "lucide-react";
 import { Back, Empty } from "@/components/ui";
 import { Refresh } from "@/components/refresh";
+import { InternalImport } from "@/components/internal-import";
+import { resumeLimitBytes } from "@/lib/config";
 import { requireSession } from "@/lib/auth";
-import { deadlinePassed, getProject, isOpen } from "@/lib/data";
+import { deadlinePassed, getProject } from "@/lib/data";
 import { decisionLabel, formatDateTime, screeningState } from "@/lib/format";
 import { decisions, type Bucket, type Decision } from "@/lib/schema";
 
@@ -48,7 +50,9 @@ export default async function ProjectReview({ params, searchParams }: {
   return <>
     <Back href="/reviewer">Your projects</Back>
     <header className="page-heading page-heading-actions"><div>
-      <span className={isOpen(project) ? "pill pill-open" : "pill"}>{isOpen(project) ? "Applications open" : project.status === "draft" ? "Draft" : "Applications closed"}</span>
+      <span className={project.status === "published" ? "pill pill-open" : "pill"}>
+        {project.status === "published" ? "Active review" : project.status === "draft" ? "Draft" : "Project closed"}
+      </span>
       <h1>{project.name}</h1><p>{project.short_description}</p>
       <div className="metadata"><CalendarDays size={16} aria-hidden="true" /> Deadline {formatDateTime(project.deadline)} <span>·</span> Rubric v{project.rubric_version}</div>
     </div><div className="row wrap header-actions">
@@ -56,7 +60,8 @@ export default async function ProjectReview({ params, searchParams }: {
       {exportReady && <a className="button" href={`${href}/export`}><Download size={16} aria-hidden="true" /> Export shortlist</a>}
     </div></header>
     {!exportReady && <p className="muted export-note">Shortlist export opens after the application deadline.</p>}
-    <div className="section-heading"><div><h2>Applicant shortlist</h2><span>Compare relevant experience, review each applicant’s interests, then make the call.</span></div><Refresh /></div>
+    <InternalImport projectId={project.id} maxFileBytes={resumeLimitBytes()} />
+    <div className="section-heading"><div><h2>Applicant review queue</h2><span>Compare relevant experience, review each applicant’s interests, and record your own decision.</span></div><Refresh /></div>
     <form className="panel filters" action={href}>
       <label><Search size={16} aria-hidden="true" /> Find an applicant<input name="q" defaultValue={query} maxLength={100} placeholder="Search by name or email" /></label>
       <label>Shortlist status<select name="decision" defaultValue={decision || ""}><option value="">Everyone</option>
@@ -66,7 +71,7 @@ export default async function ProjectReview({ params, searchParams }: {
       {(query || decision) && <Link className="button button-quiet" href={href}>Clear</Link>}
     </form>
     {!rows.length ? <Empty icon={UsersRound} title={query || decision ? "No applicants found" : "No applications yet"}>
-      {query || decision ? "Try another search or show everyone." : "When students apply, you can compare their experience and review their interests here."}</Empty>
+      {query || decision ? "Try another search or show everyone." : "Import a roster and resumes above to create the review queue."}</Empty>
       : <>
         <p className="result-count">{count ?? rows.length} {(count ?? rows.length) === 1 ? "applicant" : "applicants"} · ordered by suggested fit</p>
         <div className="panel table-scroll"><table><caption className="sr-only">Applicants for {project.name}, ordered by suggested fit</caption>

@@ -24,12 +24,14 @@ function statusError(status: number) {
 }
 
 function gemini(mode: "synthetic" | "private"): Provider {
-  const key = mode === "private" ? process.env.GEMINI_PRIVATE_API_KEY : process.env.GEMINI_SYNTHETIC_API_KEY;
+  const key = mode === "private"
+    ? process.env.GEMINI_API_KEY || process.env.GEMINI_PRIVATE_API_KEY
+    : process.env.GEMINI_SYNTHETIC_API_KEY;
   if (mode === "private" && key && key === process.env.GEMINI_SYNTHETIC_API_KEY) {
     throw new ScreeningError("privacy_guard");
   }
   if (!key) throw new ScreeningError("model_unconfigured");
-  const model = process.env.AI_MODEL || "gemini-3.1-flash-lite";
+  const model = process.env.AI_MODEL || "gemini-3.5-flash";
   const client = new GoogleGenAI({
     apiKey: key, vertexai: false,
     httpOptions: { timeout: 23000, retryOptions: { attempts: 1 } },

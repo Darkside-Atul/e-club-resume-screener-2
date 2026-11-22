@@ -17,19 +17,24 @@ export async function processScreening(db: SupabaseClient, job: Job) {
   let failure: ScreeningError | null = null;
   try {
     const { data: application, error } = await db.from("applications")
-      .select("id,project_id,user_id,resume_path,answers,rubric_version,submission_version")
+      .select("id,project_id,user_id,applicant_name,applicant_student_id,resume_path,answers,rubric_version,submission_version")
       .eq("id", job.application_id).maybeSingle();
     if (error) throw new ScreeningError("database_unavailable", true);
     if (!application || application.submission_version !== job.submission_version) return;
     const provider = screeningProvider();
     if (provider.mode === "synthetic") verifySynthetic(application.project_id, undefined, !!application.answers.length);
-    const [{ data: project, error: projectError }, rubric, bytes, { data: applicant, error: profileError }] = await Promise.all([
+    const [{ data: project, error: projectError }, rubric, bytes, legacyApplicantResult] = await Promise.all([
       db.from("projects").select("questions").eq("id", application.project_id).single(),
       getRubric(db, application.project_id, application.rubric_version),
       readResume(db, application.resume_path),
-      db.from("profiles").select("name,student_id").eq("id", application.user_id).single(),
+      application.user_id
+        ? db.from("profiles").select("name,student_id").eq("id", application.user_id).single()
+        : Promise.resolve({ data: null, error: null }),
     ]);
-    if (projectError || !project || profileError || !applicant) throw new ScreeningError("database_unavailable", true);
+    const applicant = application.applicant_name
+      ? { name: application.applicant_name, student_id: application.applicant_student_id }
+      : legacyApplicantResult.data;
+    if (projectError || !project || legacyApplicantResult.error || !applicant) throw new ScreeningError("database_unavailable", true);
     if (provider.mode === "synthetic") verifySynthetic(application.project_id, bytes, !!project.questions.length);
     const text = await parsePdf(bytes, resumeLimitBytes(), true);
     const evaluation = await screenEvidence(provider.generate, text, project.questions, application.answers, rubric,

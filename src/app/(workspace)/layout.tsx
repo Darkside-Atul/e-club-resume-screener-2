@@ -2,17 +2,16 @@ import { LogOut } from "lucide-react";
 import { signOut } from "@/app/actions";
 import { Navigation } from "@/components/nav";
 import { Brand } from "@/components/ui";
-import { homeFor, requireSession } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function Workspace({ children }: { children: React.ReactNode }) {
-  const { profile } = await requireSession();
-  const reviewer = profile.role === "reviewer";
+  await requireSession("reviewer");
   return <div className="workspace">
     <header className="topbar"><div className="topbar-inner">
-      <Brand href={homeFor(profile.role)} />
-      <Navigation reviewer={reviewer} />
+      <Brand href="/reviewer" />
+      <Navigation reviewer />
       <form action={signOut} className="sign-out"><button type="submit" className="button button-quiet">
         <LogOut size={16} aria-hidden="true" /><span>Sign out</span>
       </button></form>

@@ -39,44 +39,15 @@ export async function signInPassword(_: FormState, form: FormData): Promise<Form
     return { error: "Invalid email or password." };
   }
   const { data: profile, error: profileError } = await db.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-  if (profileError || !profile) {
+  if (profileError || !profile || profile.role !== "reviewer") {
     await db.auth.signOut({ scope: "local" });
-    return { error: "We couldn’t load your account. Please try again." };
+    return { error: "This workspace is available to authorized reviewers only." };
   }
   redirect(homeFor(profile.role));
 }
 
-export async function signUpPassword(_: FormState, form: FormData): Promise<FormState> {
-  if (!publicConfig()) return { error: "Account creation is unavailable." };
-  const { email, password } = passwordFormValues(form);
-  const confirmation = String(form.get("confirm_password") || "");
-  if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
-  if (!password.success || password.data.length < 8) return { error: "Use a password with at least 8 characters." };
-  if (password.data !== confirmation) return { error: "The passwords do not match." };
-  const db = await userDb();
-  const { data, error } = await db.auth.signUp({ email: email.data, password: password.data });
-  if (error) {
-    if (error.code === "weak_password") return { error: "Choose a stronger password and try again." };
-    if (error.status === 429) return { error: "Too many attempts. Wait a little while before trying again." };
-    return { error: "We couldn’t create your account. Check your details and try again." };
-  }
-  if (!data.user || !allowedEmail(data.user.email) || data.user.identities?.length === 0) {
-    return { error: "We couldn’t create your account. Check your details and try again." };
-  }
-
-  if (!data.session) {
-    try {
-      const admin = serviceDb();
-      const { error: confirmError } = await admin.auth.admin.updateUserById(data.user.id, { email_confirm: true });
-      if (confirmError) return { error: "Your account was created, but sign-in could not be completed. Please sign in." };
-      const { error: signInError } = await db.auth.signInWithPassword({ email: email.data, password: password.data });
-      if (signInError) return { error: "Your account was created. Please sign in with your password." };
-    } catch {
-      return { error: "Your account was created, but sign-in could not be completed. Please sign in." };
-    }
-  }
-
-  redirect("/projects");
+export async function signUpPassword(_: FormState, _form: FormData): Promise<FormState> {
+  return { error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." };
 }
 
 export async function signInGoogle() {

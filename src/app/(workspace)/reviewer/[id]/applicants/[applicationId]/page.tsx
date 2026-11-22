@@ -27,7 +27,9 @@ export default async function ApplicantReview({ params }: { params: Promise<{ id
   const application = await getApplication(db, id, applicationId);
   const version = application.submission_version;
   const [profileResult, screeningResult, jobResult, decisionResult, history] = await Promise.all([
-    db.from("profiles").select("name,email,student_id").eq("id", application.user_id).single(),
+    application.user_id
+      ? db.from("profiles").select("name,email,student_id").eq("id", application.user_id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
     db.from("screenings").select("*").eq("application_id", applicationId).eq("submission_version", version).maybeSingle(),
     db.from("screening_jobs").select("status,error_code").eq("application_id", applicationId).eq("submission_version", version).maybeSingle(),
     db.from("decisions").select("decision,note,decided_at,decided_by,submission_version")
@@ -35,10 +37,14 @@ export default async function ApplicantReview({ params }: { params: Promise<{ id
     db.from("decision_history").select("id,decision,note,decided_at,decided_by,submission_version").eq("application_id", applicationId)
       .order("decided_at", { ascending: false }).order("id", { ascending: false }),
   ]);
-  if ([profileResult, screeningResult, jobResult, decisionResult, history].some(({ error }) => error) || !profileResult.data) {
+  const applicant = {
+    name: application.applicant_name || profileResult.data?.name || "",
+    email: application.applicant_email || profileResult.data?.email || "",
+    student_id: application.applicant_student_id || profileResult.data?.student_id || null,
+  };
+  if ([profileResult, screeningResult, jobResult, decisionResult, history].some(({ error }) => error) || !applicant.name || !applicant.email) {
     throw new Error("review_load_failed");
   }
-  const applicant = profileResult.data;
   const screening = screeningResult.data as Screening | null;
   const review = decisionResult.data as Review | null;
   const job = jobResult.data;
@@ -59,8 +65,9 @@ export default async function ApplicantReview({ params }: { params: Promise<{ id
             <a className="button button-secondary" href={resume} target="_blank" rel="noreferrer">Open PDF <ArrowUpRight size={16} /></a></div>
           <iframe key={version} src={resume} title={`PDF resume for ${applicant.name}`} referrerPolicy="no-referrer" />
         </section>
-        {(application.links.length > 0 || application.answers.length > 0) && <section className="panel card form-stack">
+        {(application.links.length > 0 || application.answers.length > 0 || application.applicant_interests.length > 0) && <section className="panel card form-stack">
           <h2>Application responses</h2>
+          {application.applicant_interests.length > 0 && <div><h3>Applicant interests</h3><Skills items={application.applicant_interests} /></div>}
           {application.links.length > 0 && <div><h3>Portfolio and project links</h3><ul className="link-list">
             {application.links.map((link, i) => <li key={i}><a href={link} target="_blank" rel="noreferrer">{link} <ArrowUpRight size={14} /></a></li>)}
           </ul></div>}
