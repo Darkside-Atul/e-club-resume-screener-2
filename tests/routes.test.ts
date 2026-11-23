@@ -17,6 +17,7 @@ import { POST as internalImportStart } from "@/app/api/internal/import/start/rou
 import { POST as internalImportComplete } from "@/app/api/internal/import/complete/route";
 import { GET as callback } from "@/app/auth/callback/route";
 import { requireSession } from "@/lib/auth";
+import { sameOrigin } from "@/lib/http";
 import { POST as start } from "@/app/api/uploads/start/route";
 import { POST as submit } from "@/app/api/uploads/submit/route";
 import { GET as exportShortlist } from "@/app/(workspace)/reviewer/[id]/export/route";
@@ -145,6 +146,23 @@ describe("server guards", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-disposition")).toContain("attachment");
     expect(await response.text()).toContain('"\'=formula"');
+  });
+});
+
+describe("same-origin request guard", () => {
+  it("accepts the current deployment origin without relying on a hardcoded app URL", () => {
+    const request = new Request("https://e-club-resume-screener.vercel.app/api/internal/import/start", {
+      method: "POST",
+      headers: { Origin: "https://e-club-resume-screener.vercel.app" },
+    });
+    expect(sameOrigin(request)).toBe(true);
+
+    const crossOrigin = new Request("https://e-club-resume-screener.vercel.app/api/internal/import/start", {
+      method: "POST",
+      headers: { Origin: "https://attacker.example" },
+    });
+    expect(sameOrigin(crossOrigin)).toBe(false);
+    expect(sameOrigin(new Request("https://e-club-resume-screener.vercel.app/api/internal/import/start", { method: "POST" }))).toBe(false);
   });
 });
 
