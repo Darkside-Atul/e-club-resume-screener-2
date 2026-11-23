@@ -3,6 +3,7 @@ import { ArrowUpRight, CalendarDays, Download, Pencil, Search, UsersRound } from
 import { Back, Empty } from "@/components/ui";
 import { Refresh } from "@/components/refresh";
 import { InternalImport } from "@/components/internal-import";
+import { CandidateProfileTable } from "@/components/candidate-profile-table";
 import { resumeLimitBytes } from "@/lib/config";
 import { requireSession } from "@/lib/auth";
 import { deadlinePassed, getProject } from "@/lib/data";
@@ -38,6 +39,11 @@ export default async function ProjectReview({ params, searchParams }: {
     .order("submitted_at").order("id").range((page - 1) * size, page * size - 1);
   if (error && error.code !== "PGRST103") throw new Error("ranking_load_failed");
   const rows = (data || []) as Rank[];
+  const { data: candidateData, error: candidateError } = await db.from("applications")
+    .select("id,applicant_name,applicant_email,created_at,profile")
+    .eq("project_id", project.id).eq("source", "upload")
+    .order("created_at", { ascending: false }).limit(100);
+  if (candidateError) throw new Error("candidate_profiles_load_failed");
   const href = `/reviewer/${project.id}`;
   const exportReady = deadlinePassed(project.deadline);
   const pageHref = (next: number) => {
@@ -61,6 +67,7 @@ export default async function ProjectReview({ params, searchParams }: {
     </div></header>
     {!exportReady && <p className="muted export-note">Shortlist export opens after the application deadline.</p>}
     <InternalImport projectId={project.id} maxFileBytes={resumeLimitBytes()} />
+    <CandidateProfileTable candidates={(candidateData || []) as Parameters<typeof CandidateProfileTable>[0]["candidates"]} projectId={project.id} />
     <div className="section-heading"><div><h2>Compatibility results</h2><span>Run a check to compare each resume with this project&apos;s requirements. Review the evidence before deciding.</span></div><Refresh /></div>
     <form className="panel filters" action={href}>
       <label><Search size={16} aria-hidden="true" /> Find an applicant<input name="q" defaultValue={query} maxLength={100} placeholder="Search by name or email" /></label>
