@@ -50,6 +50,39 @@ export async function signUpPassword(_: FormState, _form: FormData): Promise<For
   return { error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." };
 }
 
+export async function createReviewerAccount(_: FormState, form: FormData): Promise<FormState> {
+  await requireSession("reviewer");
+  const input = z.object({
+    email: z.string().trim().toLowerCase().pipe(z.email().max(254)),
+    password: z.string().min(12).max(72),
+    confirmPassword: z.string().min(12).max(72),
+  }).safeParse({
+    email: String(form.get("email") || ""),
+    password: form.get("password"),
+    confirmPassword: form.get("confirm_password"),
+  });
+  if (!input.success) return { error: "Enter a valid campus email and a password with at least 12 characters." };
+  if (!allowedEmail(input.data.email)) return { error: `Use an @${authorizedDomain()} email address.` };
+  if (input.data.password !== input.data.confirmPassword) return { error: "The passwords do not match." };
+
+  const admin = serviceDb();
+  const { data, error } = await admin.auth.admin.createUser({
+    email: input.data.email,
+    password: input.data.password,
+    email_confirm: true,
+  });
+  if (error || !data.user) return { error: "Could not create the reviewer account. Check that the email is new and try again." };
+
+  const { data: profile, error: profileError } = await admin.from("profiles")
+    .update({ role: "reviewer" }).eq("id", data.user.id).select("id").maybeSingle();
+  if (profileError || !profile) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    return { error: "The reviewer account could not be finalized. Please try again." };
+  }
+  revalidatePath("/reviewer/access");
+  return { success: "Reviewer account created. They can sign in with the email and password you provided." };
+}
+
 export async function signInGoogle() {
   if (!publicConfig() || process.env.GOOGLE_OAUTH_ENABLED !== "true") redirect("/sign-in?error=unavailable");
   const db = await userDb();
