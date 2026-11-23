@@ -1,11 +1,10 @@
-import { appUrl } from "./config";
-
 export function jsonError(message: string, status: number) {
   return Response.json({ error: message }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 export function sameOrigin(request: Request) {
-  return request.headers.get("origin") === appUrl();
+  const origin = request.headers.get("origin");
+  return !!origin && origin === new URL(request.url).origin;
 }
 
 export function databaseMessage(message?: string) {
