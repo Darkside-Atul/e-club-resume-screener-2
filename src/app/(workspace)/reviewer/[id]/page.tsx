@@ -40,7 +40,7 @@ export default async function ProjectReview({ params, searchParams }: {
   if (error && error.code !== "PGRST103") throw new Error("ranking_load_failed");
   const rows = (data || []) as Rank[];
   const { data: candidateData, error: candidateError } = await db.from("applications")
-    .select("id,applicant_name,applicant_email,created_at,profile")
+    .select("id,applicant_name,applicant_email,created_at:submitted_at,profile")
     .eq("project_id", project.id).eq("source", "upload")
     .order("created_at", { ascending: false }).limit(100);
   if (candidateError) throw new Error("candidate_profiles_load_failed");
