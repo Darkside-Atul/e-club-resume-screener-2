@@ -27,14 +27,16 @@ export default async function Reviewer() {
     <div className="section-heading"><h2>Projects you lead</h2>{newProject}</div>
     {!projects.length ? <Empty title="Create your first project" icon={FolderKanban}>Add the project details, application deadline and screening rubric to get started.</Empty>
       : <div className="project-grid">{projects.map((project) => <article className="panel project-card" key={project.id}>
-        <div className="row between">
-          <span className="icon-tile"><FolderKanban size={20} aria-hidden="true" /></span>
-          <span className={isOpen(project) ? "pill pill-open" : "pill"}>{isOpen(project) ? "Open" : project.status === "draft" ? "Draft" : "Closed"}</span>
-        </div>
-        <h3><Link href={`/reviewer/${project.id}`}>{project.name}</Link></h3><p>{project.short_description}</p>
-        <Skills items={project.required_skills} />
-        <div className="project-foot"><span><CalendarDays size={16} aria-hidden="true" /> Deadline {formatDate(project.deadline)}</span>
-          <Link href={`/reviewer/${project.id}`}>Review <ArrowUpRight size={17} /></Link></div>
+        <Link className="project-card-link" href={`/reviewer/${project.id}`} aria-label={`Review ${project.name}`}>
+          <div className="row between">
+            <span className="icon-tile"><FolderKanban size={20} aria-hidden="true" /></span>
+            <span className={isOpen(project) ? "pill pill-open" : "pill"}>{isOpen(project) ? "Open" : project.status === "draft" ? "Draft" : "Closed"}</span>
+          </div>
+          <h3>{project.name}</h3><p>{project.short_description}</p>
+          <Skills items={project.required_skills} />
+          <div className="project-foot"><span><CalendarDays size={16} aria-hidden="true" /> Deadline {formatDate(project.deadline)}</span>
+            <span>Review <ArrowUpRight size={17} aria-hidden="true" /></span></div>
+        </Link>
       </article>)}</div>}
   </>;
 }
