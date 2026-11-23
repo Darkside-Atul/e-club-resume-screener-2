@@ -26,13 +26,15 @@ export default async function ProjectsPage() {
     <div className="section-heading"><h2>Open for applications</h2><span>{projects.length} {projects.length === 1 ? "project" : "projects"}</span></div>
     {projects.length === 0 ? <Empty title="No open projects">New opportunities will appear here when a project lead publishes them.</Empty>
       : <div className="project-grid">{projects.map((project) => <article key={project.id} className="panel project-card">
-        <div className="row between"><span className="icon-tile"><BriefcaseBusiness size={20} aria-hidden="true" /></span>
-          <span className="pill pill-open"><span /> Open</span></div>
-        <h3><Link href={`/projects/${project.id}`}>{project.name}</Link></h3>
-        <p>{project.short_description}</p>
-        <Skills items={project.required_skills} />
-        <div className="project-foot"><span><CalendarDays size={16} aria-hidden="true" /> Closes {formatDate(project.deadline)}</span>
-          <Link href={`/projects/${project.id}`} aria-label={`View ${project.name}`}>View project <ArrowUpRight size={17} /></Link></div>
+        <Link className="project-card-link" href={`/projects/${project.id}`} aria-label={`View ${project.name}`}>
+          <div className="row between"><span className="icon-tile"><BriefcaseBusiness size={20} aria-hidden="true" /></span>
+            <span className="pill pill-open"><span /> Open</span></div>
+          <h3>{project.name}</h3>
+          <p>{project.short_description}</p>
+          <Skills items={project.required_skills} />
+          <div className="project-foot"><span><CalendarDays size={16} aria-hidden="true" /> Closes {formatDate(project.deadline)}</span>
+            <span>View project <ArrowUpRight size={17} aria-hidden="true" /></span></div>
+        </Link>
       </article>)}</div>}
   </>;
 }
