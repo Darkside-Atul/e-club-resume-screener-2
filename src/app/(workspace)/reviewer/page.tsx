@@ -21,7 +21,7 @@ export default async function Reviewer() {
       <div className="hero-content">
         <span className="eyebrow"><FolderKanban size={16} aria-hidden="true" /> Reviewer workspace</span>
         <h1>Your projects</h1>
-        <p>Publish opportunities, review applications, and record decisions for the projects you lead.</p>
+        <p>Add projects, run resume compatibility checks, and review the results in one private workspace.</p>
       </div>
     </section>
     <div className="section-heading"><h2>Projects you lead</h2>{newProject}</div>

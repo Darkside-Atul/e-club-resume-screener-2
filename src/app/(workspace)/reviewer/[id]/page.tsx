@@ -51,7 +51,7 @@ export default async function ProjectReview({ params, searchParams }: {
     <Back href="/reviewer">Your projects</Back>
     <header className="page-heading page-heading-actions"><div>
       <span className={project.status === "published" ? "pill pill-open" : "pill"}>
-        {project.status === "published" ? "Active review" : project.status === "draft" ? "Draft" : "Project closed"}
+        {project.status === "published" ? "Ready to check" : project.status === "draft" ? "Draft" : "Project closed"}
       </span>
       <h1>{project.name}</h1><p>{project.short_description}</p>
       <div className="metadata"><CalendarDays size={16} aria-hidden="true" /> Deadline {formatDateTime(project.deadline)} <span>·</span> Rubric v{project.rubric_version}</div>
@@ -61,7 +61,7 @@ export default async function ProjectReview({ params, searchParams }: {
     </div></header>
     {!exportReady && <p className="muted export-note">Shortlist export opens after the application deadline.</p>}
     <InternalImport projectId={project.id} maxFileBytes={resumeLimitBytes()} />
-    <div className="section-heading"><div><h2>Applicant review queue</h2><span>Compare relevant experience, review each applicant’s interests, and record your own decision.</span></div><Refresh /></div>
+    <div className="section-heading"><div><h2>Compatibility results</h2><span>Run a check to compare each resume with this project&apos;s requirements. Review the evidence before deciding.</span></div><Refresh /></div>
     <form className="panel filters" action={href}>
       <label><Search size={16} aria-hidden="true" /> Find an applicant<input name="q" defaultValue={query} maxLength={100} placeholder="Search by name or email" /></label>
       <label>Shortlist status<select name="decision" defaultValue={decision || ""}><option value="">Everyone</option>
@@ -70,8 +70,8 @@ export default async function ProjectReview({ params, searchParams }: {
       <button className="button button-secondary" type="submit">Show applicants</button>
       {(query || decision) && <Link className="button button-quiet" href={href}>Clear</Link>}
     </form>
-    {!rows.length ? <Empty icon={UsersRound} title={query || decision ? "No applicants found" : "No applications yet"}>
-      {query || decision ? "Try another search or show everyone." : "Import a roster and resumes above to create the review queue."}</Empty>
+    {!rows.length ? <Empty icon={UsersRound} title={query || decision ? "No matching results" : "No compatibility results yet"}>
+      {query || decision ? "Try another search or show everyone." : "Add a resume above and run a check to see how it matches this project."}</Empty>
       : <>
         <p className="result-count">{count ?? rows.length} {(count ?? rows.length) === 1 ? "applicant" : "applicants"} · ordered by suggested fit</p>
         <div className="panel table-scroll"><table><caption className="sr-only">Applicants for {project.name}, ordered by suggested fit</caption>
