@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowRight, LoaderCircle } from "lucide-react";
-import { retryScreening, saveDecision, signInPassword, signUpPassword, updateProfile } from "@/app/actions";
+import { createReviewerAccount, retryScreening, saveDecision, signInPassword, signUpPassword, updateProfile } from "@/app/actions";
 import { decisions } from "@/lib/schema";
 import { decisionLabel } from "@/lib/format";
 import type { Profile, Review } from "@/lib/types";
@@ -36,6 +36,18 @@ export function PasswordSignUpForm({ domain, enabled }: { domain: string; enable
     <label>Confirm password <input name="confirm_password" type="password" required autoComplete="new-password" minLength={8} maxLength={72} disabled={!enabled} /></label>
     <Notice state={state} />
     <SubmitButton busy="Creating account…">Create account <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
+  </form>;
+}
+
+export function ReviewerAccountForm({ domain }: { domain: string }) {
+  const [state, action] = useActionState(createReviewerAccount, {});
+  return <form action={action} className="form-stack">
+    <label>Campus email <input name="email" type="email" required autoComplete="email" placeholder={`name@${domain}`} maxLength={254} /></label>
+    <label>Initial password <input name="password" type="password" required autoComplete="new-password" minLength={12} maxLength={72} /></label>
+    <label>Confirm initial password <input name="confirm_password" type="password" required autoComplete="new-password" minLength={12} maxLength={72} /></label>
+    <p className="muted">This creates a confirmed reviewer account directly. Share the initial password with the reviewer through a secure channel.</p>
+    <Notice state={state} />
+    <SubmitButton busy="Creating reviewer…">Create reviewer account <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
   </form>;
 }
 
