@@ -1,11 +1,30 @@
 import type { NextConfig } from "next";
 
+function isHttpUrl(value: string | undefined): value is string {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const supabaseUrlCandidate = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL_3;
+const supabaseUrl = isHttpUrl(supabaseUrlCandidate) ? supabaseUrlCandidate : undefined;
+const supabasePublishableKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY_3;
+
 const config: NextConfig = {
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL_3,
-    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY_3,
-  },
+  ...(supabaseUrl && supabasePublishableKey
+    ? {
+        env: {
+          NEXT_PUBLIC_SUPABASE_URL: supabaseUrl,
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabasePublishableKey,
+        },
+      }
+    : {}),
   poweredByHeader: false,
   devIndicators: false,
   serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],

@@ -17,7 +17,16 @@ export function publicConfig() {
   if (demoEnabled()) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL_3;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY_3;
-  return url && key ? { url, key } : null;
+  if (!url || !key) return null;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+
+  return { url, key };
 }
 
 export function appUrl() {
