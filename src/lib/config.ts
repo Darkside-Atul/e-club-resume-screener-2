@@ -19,10 +19,14 @@ export function publicConfig() {
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_URL ||
     process.env.RESUME_MRTS_SUPABASE_URL ||
+    process.env.RESUME_MRTS_SUPABASE_URL_2 ||
+    process.env.SUPABASE_URL_2 ||
     process.env.SUPABASE_URL_3;
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.RESUME_MRTS_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY_2 ||
     process.env.SUPABASE_PUBLISHABLE_KEY_3;
   if (!url || !key) return null;
 
