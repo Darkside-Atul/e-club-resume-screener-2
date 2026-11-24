@@ -28,6 +28,8 @@ export function serviceDb() {
   const key =
     process.env.SUPABASE_SECRET_KEY ||
     process.env.RESUME_MRTS_SUPABASE_SECRET_KEY ||
+    process.env.RESUME_MRTS_SUPABASE_SECRET_KEY_2 ||
+    process.env.SUPABASE_SECRET_KEY_2 ||
     process.env.SUPABASE_SECRET_KEY_3;
   if (!config || !key) throw new Error("supabase_service_not_configured");
   return createClient(config.url, key, {
