@@ -1,4 +1,5 @@
 import { session } from "@/lib/auth";
+import { getProject } from "@/lib/data";
 import { shortlistCsv, type CsvRow } from "@/lib/csv";
 import { jsonError } from "@/lib/http";
 import { idSchema } from "@/lib/schema";
@@ -8,11 +9,16 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   if (!current || current.profile.role !== "reviewer") return jsonError("Reviewer access required.", 403);
   const { id } = await context.params;
   if (!idSchema.safeParse(id).success) return jsonError("Project not found.", 404);
+  try {
+    await getProject(current.db, id, current.profile.id);
+  } catch {
+    return jsonError("Project not found.", 404);
+  }
 
   const rows: CsvRow[] = [];
   const batch = 250;
   for (let offset = 0; ; offset += batch) {
-    const { data, error } = await current.db.rpc("shortlist_csv_rows", { p_project: id }).range(offset, offset + batch - 1);
+    const { data, error } = await current.db.rpc("shortlist_csv_rows_for_reviewer", { p_reviewer: current.profile.id, p_project: id }).range(offset, offset + batch - 1);
     if (error?.message === "project_not_found") return jsonError("Project not found.", 404);
     if (error?.message === "export_before_deadline") return jsonError("Shortlist export opens after the application deadline.", 409);
     if (error || !data) return jsonError("The shortlist could not be exported.", 503);

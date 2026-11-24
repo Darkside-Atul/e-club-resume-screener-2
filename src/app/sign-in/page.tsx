@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { signInGoogle } from "@/app/actions";
 import { AuthLayout } from "@/components/auth-layout";
-import { PasswordSignInForm, SubmitButton } from "@/components/forms";
+import { SubmitButton } from "@/components/forms";
 import { homeFor, session } from "@/lib/auth";
-import { authorizedDomain, demoEnabled, publicConfig } from "@/lib/config";
+import { demoEnabled } from "@/lib/config";
 
 export const metadata = { title: "Sign in" };
 
@@ -12,16 +12,12 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
   const existing = await session();
   if (existing) redirect(homeFor(existing.profile.role));
   const code = (await searchParams).error;
-  const enabled = !!publicConfig();
-  const google = enabled && process.env.GOOGLE_OAUTH_ENABLED === "true";
+  const enabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET && process.env.AUTH_SECRET);
   return <AuthLayout title="Reviewer sign in" description="Sign in with your authorized E-Club reviewer account.">
-    {!enabled && <div className="notice" role="status">Sign-in is unavailable until the portal is connected to Supabase.</div>}
-    {code && <div className="notice notice-error" role="alert">{code === "domain"
-      ? `Sign in with your @${authorizedDomain()} account.`
-      : code === "internal" ? "This workspace is available to authorized E-Club reviewers only."
+    {!enabled && <div className="notice" role="status">Google sign-in is not configured for this deployment.</div>}
+    {code && <div className="notice notice-error" role="alert">{code === "AccessDenied"
+      ? "Use your verified campus Google account with reviewer access."
       : "We couldn’t sign you in. Please try again."}</div>}
-    {google && <><form action={signInGoogle}><SubmitButton secondary busy="Connecting…">Continue with Google</SubmitButton></form>
-      <div className="divider"><span>or sign in with email</span></div></>}
-    {enabled && <PasswordSignInForm domain={authorizedDomain()} enabled={enabled} />}
+    {enabled && <form action={signInGoogle}><SubmitButton secondary busy="Connecting…">Continue with Google</SubmitButton></form>}
   </AuthLayout>;
 }

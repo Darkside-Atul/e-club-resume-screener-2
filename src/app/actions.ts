@@ -3,69 +3,21 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { homeFor, requireSession } from "@/lib/auth";
-import { allowedEmail, appUrl, authorizedDomain, publicConfig } from "@/lib/config";
-import { serviceDb, userDb } from "@/lib/db";
+import { signIn as authSignIn, signOut as authSignOut } from "@/auth";
+import { requireSession } from "@/lib/auth";
+import { serviceDb } from "@/lib/db";
 import { relevantCriteria } from "@/lib/evaluation";
 import { databaseMessage } from "@/lib/http";
 import { decisionSchema, idSchema, profileSchema, projectSchema } from "@/lib/schema";
 
 export type FormState = { error?: string; success?: string };
 
-function passwordFormValues(form: FormData) {
-  const email = z.email().safeParse(String(form.get("email") || "").trim().toLowerCase());
-  const password = z.string().min(1).max(72).safeParse(form.get("password"));
-  return { email, password };
-}
-
-function passwordAuthError(error: { code?: string; status?: number }) {
-  if (error.code === "email_not_confirmed") return "Invalid email or password.";
-  if (error.code === "weak_password") return "Choose a stronger password and try again.";
-  if (error.status === 429) return "Too many attempts. Wait a little while before trying again.";
-  if (error.code === "invalid_credentials") return "Invalid email or password.";
-  return "We couldn’t complete sign-in right now. Please try again.";
-}
-
-export async function signInPassword(_: FormState, form: FormData): Promise<FormState> {
-  if (!publicConfig()) return { error: "Password sign-in is unavailable." };
-  const { email, password } = passwordFormValues(form);
-  if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
-  if (!password.success) return { error: "Enter your password." };
-  const db = await userDb();
-  const { data, error } = await db.auth.signInWithPassword({ email: email.data, password: password.data });
-  if (error || !data.user) return { error: passwordAuthError(error || {}) };
-  if (!data.user.email_confirmed_at || !allowedEmail(data.user.email)) {
-    await db.auth.signOut({ scope: "local" });
-    return { error: "Invalid email or password." };
-  }
-  const { data: profile, error: profileError } = await db.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-  if (profileError || !profile || profile.role !== "reviewer") {
-    await db.auth.signOut({ scope: "local" });
-    return { error: "This workspace is available to authorized reviewers only." };
-  }
-  redirect(homeFor(profile.role));
-}
-
-export async function signUpPassword(_: FormState, _form: FormData): Promise<FormState> {
-  return { error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." };
-}
-
 export async function signInGoogle() {
-  if (!publicConfig() || process.env.GOOGLE_OAUTH_ENABLED !== "true") redirect("/sign-in?error=unavailable");
-  const db = await userDb();
-  const { data, error } = await db.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo: `${appUrl()}/auth/callback`, queryParams: { hd: authorizedDomain(), prompt: "select_account" } },
-  });
-  if (error || !data.url) redirect("/sign-in?error=unavailable");
-  redirect(data.url);
+  await authSignIn("google", { redirectTo: "/reviewer" });
 }
 
 export async function signOut() {
-  const db = await userDb();
-  const { error } = await db.auth.signOut({ scope: "local" });
-  if (error) throw new Error("sign_out_failed");
-  redirect("/sign-in");
+  await authSignOut({ redirectTo: "/sign-in" });
 }
 
 export async function updateProfile(_: FormState, form: FormData): Promise<FormState> {
@@ -155,8 +107,10 @@ export async function saveDecision(_: FormState, form: FormData): Promise<FormSt
   });
   if (!parsed.success) return { error: "Choose a decision and keep the note within 2,000 characters." };
   const { applicationId, version, decision, note } = parsed.data;
-  const { data: owned } = await db.from("applications").select("project_id").eq("id", applicationId).maybeSingle();
-  if (!owned) return { error: "Application not found." };
+  const { data: owned, error: ownershipError } = await db.from("applications").select("project_id").eq("id", applicationId).maybeSingle();
+  if (ownershipError || !owned) return { error: "Application not found." };
+  const { data: project } = await db.from("projects").select("id").eq("id", owned.project_id).eq("reviewer_id", profile.id).maybeSingle();
+  if (!project) return { error: "Application not found." };
   const { data, error } = await serviceDb().rpc("record_decision", {
     p_reviewer: profile.id, p_application: applicationId, p_version: version, p_decision: decision, p_note: note,
   });
@@ -171,8 +125,10 @@ export async function retryScreening(_: FormState, form: FormData): Promise<Form
   const parsed = z.object({ id: idSchema, version: z.coerce.number().int().min(1) })
     .safeParse({ id: form.get("application_id"), version: form.get("version") });
   if (!parsed.success) return { error: "Application not found." };
-  const { data: owned } = await db.from("applications").select("project_id").eq("id", parsed.data.id).maybeSingle();
-  if (!owned) return { error: "Application not found." };
+  const { data: owned, error: ownershipError } = await db.from("applications").select("project_id").eq("id", parsed.data.id).maybeSingle();
+  if (ownershipError || !owned) return { error: "Application not found." };
+  const { data: project } = await db.from("projects").select("id").eq("id", owned.project_id).eq("reviewer_id", profile.id).maybeSingle();
+  if (!project) return { error: "Application not found." };
   const { data, error } = await serviceDb().rpc("retry_screening", {
     p_reviewer: profile.id, p_application: parsed.data.id, p_version: parsed.data.version,
   });

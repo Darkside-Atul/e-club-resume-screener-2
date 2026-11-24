@@ -19,6 +19,7 @@ export async function getProject(db: SupabaseClient, id: string, owner?: string)
   if (!idSchema.safeParse(id).success) notFound();
   let query = db.from("projects").select(projectColumns).eq("id", id);
   if (owner) query = query.eq("reviewer_id", owner);
+  else query = query.eq("status", "published").gt("deadline", new Date().toISOString());
   const { data, error } = await query.maybeSingle();
   if (error) throw new Error("project_lookup_failed");
   if (!data) notFound();

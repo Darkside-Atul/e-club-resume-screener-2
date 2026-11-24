@@ -1,4 +1,5 @@
 import { session } from "@/lib/auth";
+import { getProject } from "@/lib/data";
 import { serviceDb } from "@/lib/db";
 import { jsonError } from "@/lib/http";
 import { idSchema } from "@/lib/schema";
@@ -9,6 +10,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!current || current.profile.role !== "reviewer") return jsonError("Reviewer access required.", 403);
   const { id, applicationId } = await context.params;
   if (![id, applicationId].every((value) => idSchema.safeParse(value).success)) return jsonError("Application not found.", 404);
+  try {
+    await getProject(current.db, id, current.profile.id);
+  } catch {
+    return jsonError("Application not found.", 404);
+  }
   const { data: application, error } = await current.db.from("applications").select("resume_path,submission_version")
     .eq("id", applicationId).eq("project_id", id).maybeSingle();
   if (error) return jsonError("The resume could not be loaded.", 503);

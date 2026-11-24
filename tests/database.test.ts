@@ -296,5 +296,9 @@ describe("reviewer decisions, ranking and shortlist export", () => {
     await expect(as("authenticated", student, exportSql, [projectId])).rejects.toThrow("project_not_found");
     expect(await as("authenticated", reviewer, exportSql, [projectId]))
       .toEqual([{ email: campus(student), score: 81, decision: "shortlist", note: "confirmed evidence" }]);
+    const serverExportSql = "select email,score,decision,note from shortlist_csv_rows_for_reviewer($1,$2)";
+    expect(await service(serverExportSql, [reviewer, projectId]))
+      .toEqual([{ email: campus(student), score: 81, decision: "shortlist", note: "confirmed evidence" }]);
+    await expect(service(serverExportSql, [otherReviewer, projectId])).rejects.toThrow("project_not_found");
   });
 });
