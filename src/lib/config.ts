@@ -15,9 +15,25 @@ export function demoEnabled() {
 
 export function publicConfig() {
   if (demoEnabled()) return null;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  return url && key ? { url, key } : null;
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_URL ||
+    process.env.RESUME_MRTS_SUPABASE_URL ||
+    process.env.SUPABASE_URL_3;
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY_3;
+  if (!url || !key) return null;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+
+  return { url, key };
 }
 
 export function appUrl() {
