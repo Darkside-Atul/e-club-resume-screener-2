@@ -55,7 +55,10 @@ export async function signInGoogle() {
   const db = await userDb();
   const { data, error } = await db.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${appUrl()}/auth/callback`, queryParams: { hd: authorizedDomain(), prompt: "select_account" } },
+    options: {
+      redirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${appUrl()}/auth/callback`,
+      queryParams: { hd: authorizedDomain(), prompt: "select_account" },
+    },
   });
   if (error || !data.url) redirect("/sign-in?error=unavailable");
   redirect(data.url);

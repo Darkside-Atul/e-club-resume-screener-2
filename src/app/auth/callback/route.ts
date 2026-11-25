@@ -1,9 +1,9 @@
-import { allowedEmail, appUrl, demoEnabled, publicConfig } from "@/lib/config";
+import { allowedEmail, demoEnabled, publicConfig } from "@/lib/config";
 import { userDb } from "@/lib/db";
 
 export async function GET(request: Request) {
   if (demoEnabled()) return Response.redirect(new URL("/demo", request.url), 303);
-  const target = (path: string) => Response.redirect(new URL(path, appUrl()), 303);
+  const target = (path: string) => Response.redirect(new URL(path, request.url), 303);
   if (!publicConfig()) return target("/sign-in?error=unavailable");
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");

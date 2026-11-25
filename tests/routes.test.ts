@@ -11,7 +11,7 @@ const { userDb, serviceDb, redirect } = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ userDb, serviceDb }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-import { signInPassword, signUpPassword } from "@/app/actions";
+import { signInGoogle, signInPassword, signUpPassword } from "@/app/actions";
 import { POST as screen } from "@/app/api/internal/screen/route";
 import { POST as internalImportStart } from "@/app/api/internal/import/start/route";
 import { POST as internalImportComplete } from "@/app/api/internal/import/complete/route";
@@ -75,6 +75,22 @@ describe("server guards", () => {
     signUpForm.set("confirm_password", "short");
     expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." });
     expect(userDb).not.toHaveBeenCalled();
+  });
+
+  it("sends Google OAuth through the v0 Supabase redirect proxy", async () => {
+    vi.stubEnv("GOOGLE_OAUTH_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL", "https://redirect-proxy.example/auth/callback");
+    const signInWithOAuth = vi.fn().mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null });
+    userDb.mockResolvedValue({ auth: { signInWithOAuth } });
+
+    await expect(signInGoogle()).rejects.toThrow("redirect:https://accounts.google.com/oauth");
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://redirect-proxy.example/auth/callback",
+        queryParams: { hd: "ashoka.edu.in", prompt: "select_account" },
+      },
+    });
   });
 
   it("signs in with a password and routes by the server-owned profile role", async () => {
