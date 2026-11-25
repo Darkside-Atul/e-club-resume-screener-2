@@ -19,7 +19,7 @@ function passwordFormValues(form: FormData) {
 }
 
 function passwordAuthError(error: { code?: string; status?: number }) {
-  if (error.code === "email_not_confirmed") return "Invalid email or password.";
+  if (error.code === "email_not_confirmed") return "Confirm your campus email from the link we sent before signing in.";
   if (error.code === "weak_password") return "Choose a stronger password and try again.";
   if (error.status === 429) return "Too many attempts. Wait a little while before trying again.";
   if (error.code === "invalid_credentials") return "Invalid email or password.";
