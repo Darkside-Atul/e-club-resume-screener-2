@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
-export const metadata = { title: "Sign in" };
+export const metadata = { title: "Create applicant account" };
 
 export default function SignUp() {
-  redirect("/sign-in");
+  redirect("/applicant/sign-up");
 }

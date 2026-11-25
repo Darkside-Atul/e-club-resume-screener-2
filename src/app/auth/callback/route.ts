@@ -10,15 +10,19 @@ export async function GET(request: Request) {
   const db = await userDb();
   const result = code ? await db.auth.exchangeCodeForSession(code) : null;
 
-  if (result?.error || !result?.data.user) return target("/sign-in?error=callback");
+  if (result?.error || !result?.data.user) return target("/applicant/login?error=callback");
   if (!result.data.user.email_confirmed_at || !allowedEmail(result.data.user.email)) {
     await db.auth.signOut({ scope: "local" });
     return target("/sign-in?error=domain");
   }
-  const { data: profile } = await db.from("profiles").select("role").eq("id", result.data.user.id).maybeSingle();
-  if (profile?.role !== "reviewer") {
+  const { data: profile } = await db.from("profiles").select("role,name,student_id").eq("id", result.data.user.id).maybeSingle();
+  if (!profile || (profile.role !== "reviewer" && profile.role !== "applicant")) {
     await db.auth.signOut({ scope: "local" });
-    return target("/sign-in?error=internal");
+    return target("/applicant/login?error=account");
   }
-  return target("/");
+  if (profile.role === "reviewer") {
+    await db.auth.signOut({ scope: "local" });
+    return target("/sign-in?error=google");
+  }
+  return target(profile.name && profile.student_id ? "/projects" : "/profile");
 }
