@@ -37,9 +37,8 @@ const campus = (id: string) => `${id}@ashoka.edu.in`;
 
 async function actor(reviewer = false) {
   const id = randomUUID();
-  await sql("insert into auth.users values ($1,$2,$3)", [id, campus(id), { role: "reviewer" }]);
-  await sql("update profiles set name=$2, student_id='TEST-1' where id=$1", [id, `Test ${id.slice(0, 5)}`]);
-  if (reviewer) await sql("update profiles set role='reviewer' where id=$1", [id]);
+  await service("insert into profiles (id,email,name,student_id) values ($1,$2,$3,'TEST-1')", [id, campus(id), `Test ${id.slice(0, 5)}`]);
+  if (reviewer) await service("update profiles set role='reviewer' where id=$1", [id]);
   return id;
 }
 
@@ -107,13 +106,42 @@ function finish(job: Lease, result: typeof output | null, error: string | null =
     [job.id, job.lease_token, result, error, retry]);
 }
 
+describe("Google reviewer profile provisioning", () => {
+  it("adds a verified campus email to the reviewer list without a Supabase Auth user and is idempotent", async () => {
+    const email = "new.reviewer@ashoka.edu.in";
+    const [first] = await service<{ id: string; email: string; name: string; role: string }>(
+      "select id,email,name,role from public.register_google_reviewer($1,$2)", [email, "New Reviewer"],
+    );
+    const [again] = await service<{ id: string; email: string; name: string; role: string }>(
+      "select id,email,name,role from public.register_google_reviewer($1,$2)", [email, "Updated Name"],
+    );
+    expect(first).toMatchObject({ email, name: "New Reviewer", role: "reviewer" });
+    expect(again).toMatchObject({ id: first.id, email, name: "New Reviewer", role: "reviewer" });
+    expect(await sql("select count(*)::int as count from auth.users where email=$1", [email])).toEqual([{ count: 0 }]);
+  });
+
+  it("promotes an existing campus profile when that verified email signs in with Google", async () => {
+    const existingId = await actor(false);
+    const [promoted] = await service<{ id: string; role: string }>(
+      "select id,role from public.register_google_reviewer($1,$2)", [campus(existingId), "New Name"],
+    );
+    expect(promoted).toEqual({ id: existingId, role: "reviewer" });
+  });
+
+  it("refuses to add emails outside the configured campus domain", async () => {
+    await expect(service("select * from public.register_google_reviewer($1,$2)", ["person@example.com", "External"]))
+      .rejects.toThrow("campus_account_required");
+  });
+});
+
 describe("campus auth and row-level access", () => {
   it("keeps applicant accounts outside the internal reviewer workspace", async () => {
     const user = await actor();
     expect(await as("authenticated", user, "select role from profiles")).toEqual([]);
     await expect(as("authenticated", user, "update profiles set role='reviewer' where id=$1", [user])).rejects.toThrow(/permission denied/);
-    await expect(sql("insert into auth.users (id,email) values ($1,'external@example.invalid')", [randomUUID()]))
-      .rejects.toThrow("campus_account_required");
+    await expect(as("authenticated", user,
+      "insert into profiles (id,email,role) values ($1,$2,'reviewer')", [randomUUID(), "other@ashoka.edu.in"]))
+      .rejects.toThrow(/permission denied/);
     expect(await as("authenticated", user, "select role from profiles", [], "stale@outside.invalid")).toEqual([]);
   });
 

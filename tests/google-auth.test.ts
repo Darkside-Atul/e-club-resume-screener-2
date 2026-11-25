@@ -16,6 +16,13 @@ function profileLookup(data: unknown, error: unknown = null) {
   return query;
 }
 
+function profileRegistration(data: unknown, error: unknown = null) {
+  const query = { maybeSingle: vi.fn().mockResolvedValue({ data, error }) };
+  const rpc = vi.fn().mockReturnValue(query);
+  serviceDb.mockReturnValue({ rpc });
+  return { rpc, query };
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubEnv("AUTHORIZED_EMAIL_DOMAIN", "ashoka.edu.in");
@@ -28,8 +35,8 @@ describe("direct Google reviewer authorization", () => {
     expect(serviceDb).not.toHaveBeenCalled();
   });
 
-  it("allows only a Google-verified campus email with a pre-provisioned reviewer profile", async () => {
-    const query = profileLookup({
+  it("adds a reviewer profile for a verified campus Google identity", async () => {
+    const { rpc } = profileRegistration({
       id: "50a13eaa-0c00-4d53-a828-1faac38be441",
       email: "reviewer@ashoka.edu.in",
       name: "Reviewer",
@@ -37,16 +44,18 @@ describe("direct Google reviewer authorization", () => {
       role: "reviewer",
     });
 
-    expect(await authorizeGoogleReviewer({ email: " Reviewer@Ashoka.edu.in ", email_verified: true })).toBe(true);
-    expect(query.eq).toHaveBeenNthCalledWith(1, "email", "reviewer@ashoka.edu.in");
-    expect(query.eq).toHaveBeenNthCalledWith(2, "role", "reviewer");
+    expect(await authorizeGoogleReviewer({ email: " Reviewer@Ashoka.edu.in ", email_verified: true, name: "Reviewer" })).toBe(true);
+    expect(rpc).toHaveBeenCalledWith("register_google_reviewer", {
+      p_email: "reviewer@ashoka.edu.in",
+      p_name: "Reviewer",
+    });
   });
 
-  it("fails closed when no reviewer profile exists or the profile query fails", async () => {
+  it("fails closed when profile provisioning or the existing profile lookup fails", async () => {
     profileLookup(null);
     expect(await resolveReviewerProfile("missing@ashoka.edu.in")).toBeNull();
 
-    profileLookup(null, { message: "database unavailable" });
+    profileRegistration(null, { message: "database unavailable" });
     expect(await authorizeGoogleReviewer({ email: "reviewer@ashoka.edu.in", email_verified: true })).toBe(false);
   });
 });

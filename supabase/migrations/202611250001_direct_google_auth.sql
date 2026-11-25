@@ -1,6 +1,46 @@
 begin;
 
+alter table public.profiles alter column id set default gen_random_uuid();
+alter table public.profiles drop constraint if exists profiles_id_fkey;
+drop trigger if exists campus_profile on auth.users;
+drop function if exists private.sync_profile();
+create unique index if not exists profiles_email_ci_unique on public.profiles (lower(email));
+grant usage on schema private to service_role;
+grant select on private.settings to service_role;
+
+create or replace function public.register_google_reviewer(p_email text, p_name text)
+returns public.profiles
+language plpgsql set search_path = '' as $$
+declare
+  normalized_email text := lower(trim(coalesce(p_email, '')));
+  normalized_name text := left(trim(coalesce(p_name, '')), 100);
+  saved_profile public.profiles;
+begin
+  if normalized_email !~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$'
+    or not exists (
+      select 1 from private.settings
+      where lower(split_part(normalized_email, '@', 2)) = authorized_domain
+        and split_part(normalized_email, '@', 3) = ''
+    ) then
+    raise exception 'campus_account_required';
+  end if;
+
+  insert into public.profiles as existing_profile (email, name, role)
+  values (normalized_email, normalized_name, 'reviewer')
+  on conflict (lower(email)) do update
+    set role = 'reviewer',
+        name = case when existing_profile.name = '' then excluded.name else existing_profile.name end
+  returning * into saved_profile;
+
+  return saved_profile;
+end;
+$$;
+
+revoke execute on function public.register_google_reviewer(text, text) from public, anon, authenticated;
+grant execute on function public.register_google_reviewer(text, text) to service_role;
+
 create or replace view public.ranked_applications with (security_invoker = true) as
+
 select a.id, a.project_id, a.submitted_at, a.submission_version,
   coalesce(a.applicant_name, u.name) as name,
   coalesce(a.applicant_email, u.email) as email,

@@ -29,17 +29,7 @@ Set `DEMO_MODE=true` in the hosting environment for a public demonstration witho
 
 1. Create a Supabase Free project. From this checkout, run `npx supabase login`, `npx supabase link --project-ref YOUR_PROJECT_REF` and `npx supabase db push --remote --dry-run`. Review the pending migrations, then run `npx supabase db push --remote` for the linked project. The migrations create the private `resumes` bucket, RLS policies, transactional jobs, rate limiter, reviewer records, and shortlist queries.
 2. Configure direct Google OAuth for Auth.js. Create a Web OAuth client and add the exact redirect URI `https://YOUR_APP_HOST/api/auth/callback/google`; for local development add `http://localhost:3000/api/auth/callback/google`. Google redirect URIs must match exactly; register any preview host you plan to use. Set `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and a unique `AUTH_SECRET` in the host environment. The app only accepts Google-verified emails in `AUTHORIZED_EMAIL_DOMAIN` and never grants roles from Google metadata.
-3. No public registration is enabled. Google sign-in succeeds only when the verified campus email matches an existing `public.profiles` row with the server-controlled `reviewer` role. Provision or promote reviewer profile rows through the approved administrator workflow; the existing `auth.users` record is retained only for the profile’s legacy database linkage, not as the app’s login session. Do not grant reviewer access based on user-editable metadata.
-
-```sql
-update public.profiles p set role = 'reviewer'
-from auth.users u
-where p.id = u.id and u.id = 'REVIEWER_AUTH_UUID'::uuid
-  and u.email_confirmed_at is not null
-returning p.id, p.email, p.role;
-```
-
-The default domain is `ashoka.edu.in`. If the university authorizes a different domain, change `AUTHORIZED_EMAIL_DOMAIN` and run `update private.settings set authorized_domain = 'approved.example.edu' where singleton;` before provisioning accounts. If the database contains users created before the migration, backfill the approved, confirmed accounts into `public.profiles` as applicants before provisioning reviewers.
+3. There is no separate public registration form. On first sign-in, Auth.js accepts a Google-verified `@ashoka.edu.in` address and automatically creates or promotes its `public.profiles` row as a reviewer. Google/user metadata never sets roles; the server validates the domain and assigns the fixed reviewer role. This grants reviewer access to every verified Google account in the configured domain. The default is `ashoka.edu.in`; if the university authorizes a different domain, update `AUTHORIZED_EMAIL_DOMAIN` and `private.settings.authorized_domain` together.
 
 ## Environment variables
 

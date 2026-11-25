@@ -13,10 +13,10 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
   if (existing) redirect(homeFor(existing.profile.role));
   const code = (await searchParams).error;
   const enabled = Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET && process.env.AUTH_SECRET);
-  return <AuthLayout title="Reviewer sign in" description="Sign in with your authorized E-Club reviewer account.">
+  return <AuthLayout title="Reviewer sign in" description="Continue with your verified Ashoka University Google account.">
     {!enabled && <div className="notice" role="status">Google sign-in is not configured for this deployment.</div>}
     {code && <div className="notice notice-error" role="alert">{code === "AccessDenied"
-      ? "Use your verified campus Google account with reviewer access."
+      ? "Use a Google account with a verified @ashoka.edu.in email address."
       : "We couldn’t sign you in. Please try again."}</div>}
     {enabled && <form action={signInGoogle}><SubmitButton secondary busy="Connecting…">Continue with Google</SubmitButton></form>}
   </AuthLayout>;
