@@ -23,7 +23,7 @@ Tests run the production migrations on PostgreSQL via PGlite, parse synthetic PD
 
 ## Read-only web demo
 
-Set `DEMO_MODE=true` in the hosting environment for a public demonstration without Supabase credentials. The app serves synthetic project and reviewer examples, and server-side backend access is disabled. Leave `DEMO_MODE` unset or false for the connected MVP.
+During local development, `/` opens the read-only demo so the interface can be explored without signing in. Set `DEMO_MODE=true` in a hosted environment for a public demonstration without Supabase credentials; it serves synthetic examples and disables server-side backend access. Leave `DEMO_MODE` unset or false for the connected production portal.
 
 ## Configure Supabase data and Google sign-in
 

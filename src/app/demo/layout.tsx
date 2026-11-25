@@ -7,7 +7,7 @@ import { demoEnabled } from "@/lib/config";
 export const dynamic = "force-dynamic";
 
 export default function DemoLayout({ children }: { children: React.ReactNode }) {
-  if (!demoEnabled()) notFound();
+  if (!demoEnabled() && process.env.NODE_ENV !== "development") notFound();
 
   return <div className="workspace">
     <header className="topbar"><div className="topbar-inner">
