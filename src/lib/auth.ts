@@ -2,20 +2,20 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { cache } from "react";
-import { allowedEmail, publicConfig } from "./config";
-import { userDb } from "./db";
+import { auth as authjs } from "@/auth";
+import { allowedEmail, demoEnabled } from "./config";
+import { resolveReviewerProfile } from "./google-profile";
+import { serviceDb } from "./db";
 import type { Profile } from "./types";
 
 export const session = cache(async () => {
-  if (!publicConfig()) return null;
-  const db = await userDb();
-  const { data: { user } } = await db.auth.getUser();
-  if (!user || !user.email_confirmed_at || !allowedEmail(user.email)) return null;
-  const { data, error } = await db.from("profiles")
-    .select("id,email,name,student_id,role").eq("id", user.id).maybeSingle();
-  if (error) throw new Error("profile_lookup_failed");
-  if (!data || data.role !== "reviewer") return null;
-  return { db, profile: data as Profile };
+  if (demoEnabled()) return null;
+  const current = await authjs();
+  const email = current?.user?.email;
+  if (!email || current.user?.googleEmailVerified !== true || !allowedEmail(email)) return null;
+  const profile = await resolveReviewerProfile(email);
+  if (!profile || profile.role !== "reviewer") return null;
+  return { db: serviceDb(), profile };
 });
 
 export function homeFor(role: Profile["role"]) {

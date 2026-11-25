@@ -1,6 +1,6 @@
 # E-Club Resume Screener
 
-The internal Ashoka University Entrepreneurship Club resume screener. Authorized reviewers create projects, import a roster CSV with individual PDFs or a ZIP archive, review evidence, record decisions, and export a shortlist. Applicant records are stored without creating student login accounts. The app uses Next.js App Router, Supabase Auth/Postgres/private Storage, PDF.js, Zod, and the official Google Gen AI SDK.
+The internal Ashoka University Entrepreneurship Club resume screener. Authorized reviewers create projects, import a roster CSV with individual PDFs or a ZIP archive, review evidence, record decisions, and export a shortlist. Applicant records are stored without creating student login accounts. The app uses Next.js App Router, Auth.js with direct Google OAuth, Supabase Postgres/private Storage, PDF.js, Zod, and the official Google Gen AI SDK.
 
 ## Run locally
 
@@ -23,25 +23,13 @@ Tests run the production migrations on PostgreSQL via PGlite, parse synthetic PD
 
 ## Read-only web demo
 
-Set `DEMO_MODE=true` in the hosting environment for a public demonstration without Supabase credentials. The app serves synthetic project and reviewer examples, and server-side backend access is disabled. Leave `DEMO_MODE` unset or false for the connected MVP.
+Open `/demo` in development to explore the read-only sample interface without signing in. Set `DEMO_MODE=true` in a hosted environment for a public demonstration without Supabase credentials; it serves synthetic examples and disables server-side backend access. Leave `DEMO_MODE` unset or false for the connected portal.
 
-## Configure Supabase and sign-in
+## Configure Supabase data and Google sign-in
 
-1. Create a Supabase Free project. From this checkout, run `npx supabase login`, `npx supabase link --project-ref YOUR_PROJECT_REF` and `npx supabase db push --remote --dry-run`. Review the pending migrations, then run `npx supabase db push --remote` for the linked project. The migrations create the private `resumes` bucket, RLS policies, transactional jobs, rate limiter, reviewer records, and shortlist query.
-2. In Auth URL Configuration, set the canonical **Site URL** to your app origin and allow exactly `https://YOUR_APP_HOST/auth/callback`. For local development with hosted Supabase, add `http://localhost:3000/auth/callback` to that project's redirect list. Keep confirmed email enabled. Public account creation is disabled in the app; provision team accounts through the authorized Supabase admin workflow. Avoid SMTP link tracking. Reviewers sign in with their campus email and password.
-3. For Google, have the campus Google Workspace administrator approve or create a Web OAuth client. Use Internal audience where available. Set **Authorized JavaScript origin** to the app origin and **Authorized redirect URI** to `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`. Save the Google client ID and secret in Supabase Auth → Providers → Google, enable Google there, then set `GOOGLE_OAUTH_ENABLED=true` in the app. App and database access verify the configured email domain. [Google sign-in setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google)
-4. For hosted account confirmations, keep the Email provider enabled and configure **custom SMTP**. Supabase’s default mail service delivers only to project team addresses. Use a campus-managed relay or a free transactional SMTP plan with a sender domain you already control. Resend currently lists 100 messages/day and 3,000/month on Free. Confirm sender DNS records, configure Supabase SMTP credentials and Auth rate limits, then test with a non-team campus inbox. [Supabase SMTP](https://supabase.com/docs/guides/auth/auth-smtp) · [Resend pricing](https://resend.com/pricing)
-5. Provision each authorized team account through the approved Supabase Auth admin workflow, confirm its campus email, then have the project owner promote that confirmed account by Auth UUID. Do not create student accounts or grant reviewer access based on user-editable metadata.
-
-```sql
-update public.profiles p set role = 'reviewer'
-from auth.users u
-where p.id = u.id and u.id = 'REVIEWER_AUTH_UUID'::uuid
-  and u.email_confirmed_at is not null
-returning p.id, p.email, p.role;
-```
-
-The default domain is `ashoka.edu.in`. If the university authorizes a different domain, change `AUTHORIZED_EMAIL_DOMAIN` and run `update private.settings set authorized_domain = 'approved.example.edu' where singleton;` before provisioning accounts. If the database contains users created before the migration, backfill the approved, confirmed accounts into `public.profiles` as applicants before provisioning reviewers.
+1. Create a Supabase Free project. From this checkout, run `npx supabase login`, `npx supabase link --project-ref YOUR_PROJECT_REF` and `npx supabase db push --remote --dry-run`. Review the pending migrations, then run `npx supabase db push --remote` for the linked project. The migrations create the private `resumes` bucket, RLS policies, transactional jobs, rate limiter, reviewer records, and shortlist queries.
+2. Configure direct Google OAuth for Auth.js. Create a Web OAuth client and add the exact redirect URI `https://YOUR_APP_HOST/api/auth/callback/google`; for local development add `http://localhost:3000/api/auth/callback/google`. Google redirect URIs must match exactly; register any preview host you plan to use. Set `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and a unique `AUTH_SECRET` in the host environment. The app only accepts Google-verified emails in `AUTHORIZED_EMAIL_DOMAIN` and never grants roles from Google metadata.
+3. There is no separate public registration form. On first sign-in, Auth.js accepts a Google-verified `@ashoka.edu.in` address and automatically creates or promotes its `public.profiles` row as a reviewer. Google/user metadata never sets roles; the server validates the domain and assigns the fixed reviewer role. This grants reviewer access to every verified Google account in the configured domain. The default is `ashoka.edu.in`; if the university authorizes a different domain, update `AUTHORIZED_EMAIL_DOMAIN` and `private.settings.authorized_domain` together.
 
 ## Environment variables
 
@@ -49,8 +37,8 @@ The default domain is `ashoka.edu.in`. If the university authorizes a different 
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase Connect / API Keys. Build with these available. |
 | `SUPABASE_SECRET_KEY` | Secret or legacy service-role key. Set only on the server. |
-| `APP_URL` | Exact canonical app origin. The local default is `http://localhost:3000`. |
-| `AUTHORIZED_EMAIL_DOMAIN`, `GOOGLE_OAUTH_ENABLED` | Campus domain matching SQL settings and optional Google sign-in toggle. Email/password sign-in is enabled when Supabase Auth is configured. |
+| `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET` | Direct Google OAuth credentials and Auth.js session encryption secret. Configure the Google callback as `<app-origin>/api/auth/callback/google`. |
+| `AUTHORIZED_EMAIL_DOMAIN` | Campus domain allowed for verified Google accounts; keep it aligned with the database’s `private.settings` domain. |
 | `MAX_RESUME_MB` | Default 10, range 1–25. Configure `resumes` bucket and project Storage limits to the same byte limit when changing it. |
 | `APPLICATION_RETENTION_DAYS` | Default 180, range 1–3,650, measured from the project deadline. Set the club’s approved retention period before launch. |
 | `CRON_SECRET` | Worker bearer secret. Generate using `openssl rand -hex 32`. |
@@ -77,7 +65,7 @@ Identity fields, contact identifiers detected in text, and portfolio URLs are wi
 
 ## Deploy and run the worker
 
-- **Vercel Hobby:** import the repository as a Next.js project. Set the environment variables, use Node 22/24, deploy, and update `APP_URL` and Auth redirects to the canonical production origin. Direct signed Storage uploads bypass Vercel’s 4.5 MB function-body limit. Native Vercel Cron is unnecessary. Vercel’s Hobby documentation limits the plan to non-commercial personal use. Get clarification from Vercel for an official university-operated project, sponsored or commercial activity, or any ambiguous use. Do not assume club status qualifies. [Vercel Hobby](https://vercel.com/docs/plans/hobby) · [Fair use](https://vercel.com/docs/limits/fair-use-guidelines)
+- **Vercel Hobby:** import the repository as a Next.js project. Set the environment variables, use Node 22/24, deploy, and register the canonical production callback `<production-origin>/api/auth/callback/google` with the Google OAuth client. Direct signed Storage uploads bypass Vercel’s 4.5 MB function-body limit. Native Vercel Cron is unnecessary. Vercel’s Hobby documentation limits the plan to non-commercial personal use. Get clarification from Vercel for an official university-operated project, sponsored or commercial activity, or any ambiguous use. Do not assume club status qualifies. [Vercel Hobby](https://vercel.com/docs/plans/hobby) · [Fair use](https://vercel.com/docs/limits/fair-use-guidelines)
 - **Campus hosting alternative:** on an existing university server, build with `npm ci && npm run build` and run `npm start` under a service manager behind a campus-approved HTTPS reverse proxy. Use the same Supabase setup and scheduler. Supabase must be able to reach the worker endpoint, or schedule the worker with the campus host’s own cron using its local address. [Next.js self-hosting](https://nextjs.org/docs/app/guides/self-hosting)
 
 In Supabase, enable **Cron** (`pg_cron`) and **pg_net**. In **Vault**, add `screener_origin` (canonical origin, no trailing slash) and `screener_cron_secret` (exactly the app’s `CRON_SECRET`). Run [supabase/ops/schedule.sql](supabase/ops/schedule.sql) in SQL Editor. Cron checks for due jobs every minute and performs storage and retention cleanup every 15 minutes. For a local manual worker invocation, set `CRON_SECRET` in your terminal environment and use:
@@ -91,7 +79,7 @@ The queue takes one job per invocation, uses leases and submission versions, and
 
 ## Production configuration and collaborators
 
-Use [the production environment template](.env.production.example) to populate the host's Production environment. Use the hosted Supabase project and a fresh worker secret. Store the Supabase secret key, worker secret, and synthetic Gemini key as sensitive server-only values. Keep `.env.local` for the local Supabase stack and apply production values through the host. The canonical HTTPS origin must match `APP_URL`, the Auth Site URL and callback allowlist, and the Supabase Vault origin. Configure Auth email delivery and verify the login with approved campus test mailboxes before inviting users. [Vercel environment variables](https://vercel.com/docs/environment-variables/sensitive-environment-variables)
+Use [the production environment template](.env.production.example) to populate the host's Production environment. Use the hosted Supabase project and a fresh worker secret. Store the Supabase secret key, Google OAuth client secret, Auth.js secret, worker secret, and synthetic Gemini key as sensitive server-only values. Keep `.env.local` for the local Supabase stack and apply production values through the host. Add the canonical HTTPS callback `<production-origin>/api/auth/callback/google` to the Google OAuth client and verify sign-in with an approved campus reviewer account. [Vercel environment variables](https://vercel.com/docs/environment-variables/sensitive-environment-variables)
 
 In the personal GitHub repository, open **Settings → Collaborators → Add people** to invite teammates by GitHub username. Use branches and pull requests for code contributions. Keep deployment credentials and production Supabase access limited to maintainers who need them. [GitHub collaborator instructions](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository)
 
@@ -101,6 +89,6 @@ Before deploying a change, run the checks above and review any new migrations wi
 
 Supabase Free currently includes 500 MB of database space, 1 GB of file storage, 5 GB of egress, and 50,000 monthly active users. It can pause after a week of inactivity and does not include automatic backups or point-in-time recovery. Resume uploads, validation reads, reviewer views, resubmissions and backup procedures consume quota. Vercel and Supabase can stop serving requests at free-tier limits, and a local model depends on existing compute and electricity. Verify terms and current quotas before committing to a pilot. [Supabase pricing](https://supabase.com/pricing) · [Vercel Function limits](https://vercel.com/docs/functions/limitations)
 
-For a pilot, use two reviewer accounts and two students. Publish a project, test the 10 MB private upload and resubmission from a student account, run the worker, verify advisory evidence and signed resume expiry, record a decision and check its audit history. Confirm another reviewer and the other student cannot load confidential data. Verify export closes before deadline and includes only current shortlisted submissions after it. Check refresh and sign-out, Android/iOS, and magic-link or Google delivery. Use a synthetic fixture for any free Gemini run. Establish a secure backup and restore process and protect CSV copies, which exist outside automated retention.
+For a pilot, use two reviewer accounts and two students. Publish a project, test the 10 MB private upload and resubmission from a student account, run the worker, verify advisory evidence and signed resume expiry, record a decision and check its audit history. Confirm another reviewer and the other student cannot load confidential data. Verify export closes before deadline and includes only current shortlisted submissions after it. Check Google OAuth callback, verified-campus enforcement, sign-out, and responsive layouts on Android/iOS. Use a synthetic fixture for any free Gemini run. Establish a secure backup and restore process and protect CSV copies, which exist outside automated retention.
 
 The scheduler purges resumes and application-linked records, including screening, scoring and decision history, after the configured period. Replaced and abandoned uploads are removed after their signed upload tokens expire. The project records and campus profiles remain available to the app. For an individual data removal handled by an administrator, delete the relevant application records through trusted administration and let the cleanup worker delete the corresponding Storage objects.

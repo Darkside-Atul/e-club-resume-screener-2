@@ -2,8 +2,8 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import { ArrowRight, LoaderCircle } from "lucide-react";
-import { retryScreening, saveDecision, signInPassword, updateProfile } from "@/app/actions";
+import { LoaderCircle } from "lucide-react";
+import { retryScreening, saveDecision, updateProfile } from "@/app/actions";
 import { decisions } from "@/lib/schema";
 import { decisionLabel } from "@/lib/format";
 import type { Profile, Review } from "@/lib/types";
@@ -17,17 +17,6 @@ export function SubmitButton({ children, busy = "Saving…", secondary = false }
     {pending && <LoaderCircle size={16} className="spin" aria-hidden="true" />}{pending ? busy : children}
   </button>;
 }
-
-export function PasswordSignInForm({ domain, enabled }: { domain: string; enabled: boolean }) {
-  const [state, action] = useActionState(signInPassword, {});
-  return <form action={action} className="form-stack">
-    <label>Campus email <input name="email" type="email" required autoComplete="email" placeholder={`name@${domain}`} disabled={!enabled} maxLength={254} /></label>
-    <label>Password <input name="password" type="password" required autoComplete="current-password" minLength={1} maxLength={72} disabled={!enabled} /></label>
-    <Notice state={state} />
-    <SubmitButton busy="Signing in…">Sign in <ArrowRight size={17} aria-hidden="true" /></SubmitButton>
-  </form>;
-}
-
 
 export function ProfileForm({ profile }: { profile: Profile }) {
   const [state, action] = useActionState(updateProfile, {});

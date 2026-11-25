@@ -40,10 +40,6 @@ export function publicConfig() {
   return { url, key };
 }
 
-export function appUrl() {
-  return new URL(process.env.APP_URL || "http://localhost:3000").origin;
-}
-
 function integerSetting(value: string | undefined, fallback: number, min: number, max: number) {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
