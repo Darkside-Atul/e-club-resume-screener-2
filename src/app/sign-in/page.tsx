@@ -18,6 +18,6 @@ export default async function SignIn({ searchParams }: { searchParams: Promise<{
     {code && <div className="notice notice-error" role="alert">{code === "AccessDenied"
       ? "Use a Google account with a verified @ashoka.edu.in email address."
       : "We couldn’t sign you in. Please try again."}</div>}
-    {enabled && <form action={signInGoogle}><SubmitButton secondary busy="Connecting…">Continue with Google</SubmitButton></form>}
+    {enabled && <form action={signInGoogle} target="_blank" rel="noreferrer"><SubmitButton secondary busy="Connecting…">Continue with Google</SubmitButton></form>}
   </AuthLayout>;
 }
