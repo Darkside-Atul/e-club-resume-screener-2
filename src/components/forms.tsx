@@ -19,12 +19,13 @@ export function SubmitButton({ children, busy = "Saving…", secondary = false }
 }
 
 export function PasswordSignInForm({ domain, enabled, role = "reviewer" }: {
-  domain: string; enabled: boolean; role?: Profile["role"];
+  domain?: string; enabled: boolean; role?: Profile["role"];
 }) {
   const [state, action] = useActionState(signInPassword, {});
+  const applicantSignIn = role === "applicant";
   return <form action={action} className="form-stack">
     <input type="hidden" name="role" value={role} />
-    <label>Campus email <input name="email" type="email" required autoComplete="email" placeholder={`name@${domain}`} disabled={!enabled} maxLength={254} /></label>
+    <label>{applicantSignIn ? "Campus email" : "Email"} <input name="email" type="email" required autoComplete="email" placeholder={applicantSignIn && domain ? `name@${domain}` : "name@example.com"} disabled={!enabled} maxLength={254} /></label>
     <label>Password <input name="password" type="password" required autoComplete="current-password" minLength={1} maxLength={72} disabled={!enabled} /></label>
     <Notice state={state} />
     <SubmitButton busy="Signing in…">Sign in <ArrowRight size={17} aria-hidden="true" /></SubmitButton>

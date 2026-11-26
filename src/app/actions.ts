@@ -19,7 +19,7 @@ function passwordFormValues(form: FormData) {
 }
 
 function passwordAuthError(error: { code?: string; status?: number }) {
-  if (error.code === "email_not_confirmed") return "Confirm your campus email from the link we sent before signing in.";
+  if (error.code === "email_not_confirmed") return "Confirm your email address from the link we sent before signing in.";
   if (error.code === "weak_password") return "Choose a stronger password and try again.";
   if (error.status === 429) return "Too many attempts. Wait a little while before trying again.";
   if (error.code === "invalid_credentials") return "Invalid email or password.";
@@ -31,12 +31,15 @@ export async function signInPassword(_: FormState, form: FormData): Promise<Form
   const requestedRole = z.enum(["applicant", "reviewer"]).safeParse(form.get("role"));
   const { email, password } = passwordFormValues(form);
   if (!requestedRole.success) return { error: "Choose the correct sign-in page and try again." };
-  if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  if (!email.success) return { error: "Enter a valid email address." };
+  if (requestedRole.data === "applicant" && !allowedEmail(email.data)) {
+    return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  }
   if (!password.success) return { error: "Enter your password." };
   const db = await userDb();
   const { data, error } = await db.auth.signInWithPassword({ email: email.data, password: password.data });
   if (error || !data.user) return { error: passwordAuthError(error || {}) };
-  if (!data.user.email_confirmed_at || !allowedEmail(data.user.email)) {
+  if (!data.user.email_confirmed_at || (requestedRole.data === "applicant" && !allowedEmail(data.user.email))) {
     await db.auth.signOut({ scope: "local" });
     return { error: "Invalid email or password." };
   }
