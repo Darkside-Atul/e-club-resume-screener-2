@@ -15,19 +15,34 @@ export function demoEnabled() {
 
 export function publicConfig() {
   if (demoEnabled()) return null;
-  const url =
+  const newUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL_2 ||
+    process.env.SUPABASE_NEW_SUPABASE_URL_2 ||
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL ||
+    process.env.SUPABASE_NEW_SUPABASE_URL;
+  const url = newUrl ||
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
     process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_URL ||
     process.env.RESUME_MRTS_SUPABASE_URL ||
     process.env.RESUME_MRTS_SUPABASE_URL_2 ||
     process.env.SUPABASE_URL_2 ||
     process.env.SUPABASE_URL_3;
-  const key =
+  const newKey =
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 ||
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY_2 ||
+    process.env.SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 ||
+    process.env.SUPABASE_NEW_SUPABASE_ANON_KEY_2 ||
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.SUPABASE_NEW_SUPABASE_ANON_KEY;
+  const legacyKey =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_RESUME_MRTS_SUPABASE_PUBLISHABLE_KEY ||
     process.env.RESUME_MRTS_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY_2 ||
     process.env.SUPABASE_PUBLISHABLE_KEY_3;
+  const key = newUrl ? newKey : legacyKey;
   if (!url || !key) return null;
 
   try {

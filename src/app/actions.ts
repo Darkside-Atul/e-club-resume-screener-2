@@ -19,7 +19,7 @@ function passwordFormValues(form: FormData) {
 }
 
 function passwordAuthError(error: { code?: string; status?: number }) {
-  if (error.code === "email_not_confirmed") return "Invalid email or password.";
+  if (error.code === "email_not_confirmed") return "Confirm your email address from the link we sent before signing in.";
   if (error.code === "weak_password") return "Choose a stronger password and try again.";
   if (error.status === 429) return "Too many attempts. Wait a little while before trying again.";
   if (error.code === "invalid_credentials") return "Invalid email or password.";
@@ -28,44 +28,78 @@ function passwordAuthError(error: { code?: string; status?: number }) {
 
 export async function signInPassword(_: FormState, form: FormData): Promise<FormState> {
   if (!publicConfig()) return { error: "Password sign-in is unavailable." };
+  const requestedRole = z.enum(["applicant", "reviewer"]).safeParse(form.get("role"));
   const { email, password } = passwordFormValues(form);
-  if (!email.success || !allowedEmail(email.data)) return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  if (!requestedRole.success) return { error: "Choose the correct sign-in page and try again." };
+  if (!email.success) return { error: "Enter a valid email address." };
+  if (requestedRole.data === "applicant" && !allowedEmail(email.data)) {
+    return { error: `Enter a valid @${authorizedDomain()} email address.` };
+  }
   if (!password.success) return { error: "Enter your password." };
   const db = await userDb();
   const { data, error } = await db.auth.signInWithPassword({ email: email.data, password: password.data });
   if (error || !data.user) return { error: passwordAuthError(error || {}) };
-  if (!data.user.email_confirmed_at || !allowedEmail(data.user.email)) {
+  if (!data.user.email_confirmed_at || (requestedRole.data === "applicant" && !allowedEmail(data.user.email))) {
     await db.auth.signOut({ scope: "local" });
     return { error: "Invalid email or password." };
   }
   const { data: profile, error: profileError } = await db.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
-  if (profileError || !profile || profile.role !== "reviewer") {
+  if (profileError || !profile || profile.role !== requestedRole.data) {
     await db.auth.signOut({ scope: "local" });
-    return { error: "This workspace is available to authorized reviewers only." };
+    return { error: requestedRole.data === "reviewer"
+      ? "This account is not enabled for the reviewer workspace."
+      : "This account is not enabled for the applicant portal." };
   }
   redirect(homeFor(profile.role));
 }
 
-export async function signUpPassword(_: FormState, _form: FormData): Promise<FormState> {
-  return { error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." };
+export async function signUpPassword(_: FormState, form: FormData): Promise<FormState> {
+  if (!publicConfig()) return { error: "Account creation is unavailable." };
+  const email = z.email().safeParse(String(form.get("email") || "").trim().toLowerCase());
+  const password = z.string().min(8).max(72).safeParse(form.get("password"));
+  if (!email.success || !allowedEmail(email.data)) return { error: `Use your @${authorizedDomain()} campus email address.` };
+  if (!password.success) return { error: "Choose a password between 8 and 72 characters." };
+
+  const db = await userDb();
+  const { data, error } = await db.auth.signUp({
+    email: email.data,
+    password: password.data,
+    options: {
+      emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${appUrl()}/auth/callback`,
+    },
+  });
+  if (error) {
+    if (error.code === "weak_password") return { error: "Choose a stronger password and try again." };
+    if (error.status === 429) return { error: "Too many attempts. Wait a little while and try again." };
+    return { error: "We couldn’t start account creation. Check your details and try again." };
+  }
+  if (data.session) redirect("/profile");
+  return { success: "If this campus email can be registered, we’ve sent a confirmation link. Check your inbox to continue." };
 }
 
-export async function signInGoogle() {
-  if (!publicConfig() || process.env.GOOGLE_OAUTH_ENABLED !== "true") redirect("/sign-in?error=unavailable");
+export async function signInGoogle(form: FormData) {
+  const role = z.literal("applicant").safeParse(form.get("role"));
+  if (!role.success) redirect("/sign-in?error=unavailable");
+  if (!publicConfig() || process.env.GOOGLE_OAUTH_ENABLED !== "true") redirect("/applicant/login?error=unavailable");
   const db = await userDb();
   const { data, error } = await db.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: `${appUrl()}/auth/callback`, queryParams: { hd: authorizedDomain(), prompt: "select_account" } },
+    options: {
+      redirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${appUrl()}/auth/callback`,
+      queryParams: { hd: authorizedDomain(), prompt: "select_account" },
+    },
   });
-  if (error || !data.url) redirect("/sign-in?error=unavailable");
+  if (error || !data.url) redirect("/applicant/login?error=unavailable");
   redirect(data.url);
 }
 
 export async function signOut() {
+  const current = await requireSession();
+  const destination = current.profile.role === "applicant" ? "/applicant/login" : "/sign-in";
   const db = await userDb();
   const { error } = await db.auth.signOut({ scope: "local" });
   if (error) throw new Error("sign_out_failed");
-  redirect("/sign-in");
+  redirect(destination);
 }
 
 export async function updateProfile(_: FormState, form: FormData): Promise<FormState> {

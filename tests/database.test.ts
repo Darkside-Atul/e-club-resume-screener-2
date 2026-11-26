@@ -108,13 +108,19 @@ function finish(job: Lease, result: typeof output | null, error: string | null =
 }
 
 describe("campus auth and row-level access", () => {
-  it("keeps applicant accounts outside the internal reviewer workspace", async () => {
+  it("keeps applicants campus-only while permitting provisioned external reviewers", async () => {
     const user = await actor();
-    expect(await as("authenticated", user, "select role from profiles")).toEqual([]);
+    expect(await as("authenticated", user, "select role from profiles")).toEqual([{ role: "applicant" }]);
     await expect(as("authenticated", user, "update profiles set role='reviewer' where id=$1", [user])).rejects.toThrow(/permission denied/);
-    await expect(sql("insert into auth.users (id,email) values ($1,'external@example.invalid')", [randomUUID()]))
-      .rejects.toThrow("campus_account_required");
     expect(await as("authenticated", user, "select role from profiles", [], "stale@outside.invalid")).toEqual([]);
+
+    const reviewer = randomUUID();
+    const reviewerEmail = "reviewer@example.invalid";
+    await sql("insert into auth.users values ($1,$2,$3)", [reviewer, reviewerEmail, {}]);
+    expect(await as("authenticated", reviewer, "select role from profiles", [], reviewerEmail)).toEqual([]);
+    await sql("update profiles set role='reviewer' where id=$1", [reviewer]);
+    expect(await as("authenticated", reviewer, "select role from profiles", [], reviewerEmail)).toEqual([{ role: "reviewer" }]);
+    expect(await as("authenticated", reviewer, "select id from projects", [], reviewerEmail)).toEqual([]);
   });
 
   it("isolates other applicants, reviewer projects, rubric, decisions and queue", async () => {

@@ -11,7 +11,7 @@ const { userDb, serviceDb, redirect } = vi.hoisted(() => ({
 vi.mock("@/lib/db", () => ({ userDb, serviceDb }));
 vi.mock("next/navigation", () => ({ redirect }));
 
-import { signInPassword, signUpPassword } from "@/app/actions";
+import { signInGoogle, signInPassword, signUpPassword } from "@/app/actions";
 import { POST as screen } from "@/app/api/internal/screen/route";
 import { POST as internalImportStart } from "@/app/api/internal/import/start/route";
 import { POST as internalImportComplete } from "@/app/api/internal/import/complete/route";
@@ -63,44 +63,78 @@ beforeEach(() => {
 });
 
 describe("server guards", () => {
-  it("restricts password sign-in and registration to campus email addresses", async () => {
+  it("restricts applicant sign-in and registration to campus email addresses", async () => {
     const signInForm = new FormData();
     signInForm.set("email", "test@example.com");
     signInForm.set("password", "correct-horse-battery");
+    signInForm.set("role", "applicant");
     expect(await signInPassword({}, signInForm)).toEqual({ error: "Enter a valid @ashoka.edu.in email address." });
 
     const signUpForm = new FormData();
     signUpForm.set("email", "test@ashoka.edu.in");
     signUpForm.set("password", "short");
-    signUpForm.set("confirm_password", "short");
-    expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Account creation is disabled. Contact an authorized E-Club reviewer for access." });
+    signUpForm.set("role", "reviewer");
+    expect(await signUpPassword({}, signUpForm)).toEqual({ error: "Choose a password between 8 and 72 characters." });
     expect(userDb).not.toHaveBeenCalled();
   });
 
-  it("signs in with a password and routes by the server-owned profile role", async () => {
+  it("creates applicant accounts through Supabase email confirmation", async () => {
+    const signUp = vi.fn().mockResolvedValue({ data: { user: { id: studentId }, session: null }, error: null });
+    userDb.mockResolvedValue({ auth: { signUp } });
+    const form = new FormData();
+    form.set("email", "Applicant@ashoka.edu.in");
+    form.set("password", "a-secure-test-password");
+    form.set("role", "reviewer");
+
+    await expect(signUpPassword({}, form)).resolves.toEqual({
+      success: "If this campus email can be registered, we’ve sent a confirmation link. Check your inbox to continue.",
+    });
+    expect(signUp).toHaveBeenCalledWith({
+      email: "applicant@ashoka.edu.in",
+      password: "a-secure-test-password",
+      options: { emailRedirectTo: `${origin}/auth/callback` },
+    });
+  });
+
+  it("refuses Google OAuth for reviewer accounts", async () => {
+    vi.stubEnv("GOOGLE_OAUTH_ENABLED", "true");
+    const form = new FormData();
+    form.set("role", "reviewer");
+    await expect(signInGoogle(form)).rejects.toThrow("redirect:/sign-in?error=unavailable");
+    expect(userDb).not.toHaveBeenCalled();
+  });
+
+  it("sends applicant Google OAuth through the v0 Supabase redirect proxy", async () => {
+    vi.stubEnv("GOOGLE_OAUTH_ENABLED", "true");
+    vi.stubEnv("NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL", "https://redirect-proxy.example/auth/callback");
+    const signInWithOAuth = vi.fn().mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null });
+    userDb.mockResolvedValue({ auth: { signInWithOAuth } });
+    const form = new FormData();
+    form.set("role", "applicant");
+
+    await expect(signInGoogle(form)).rejects.toThrow("redirect:https://accounts.google.com/oauth");
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://redirect-proxy.example/auth/callback",
+        queryParams: { hd: "ashoka.edu.in", prompt: "select_account" },
+      },
+    });
+  });
+
+  it("allows external email for reviewer sign-in while routing by the server-owned role", async () => {
     const maybeSingle = vi.fn().mockResolvedValue({ data: { role: "reviewer" }, error: null });
     const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle };
     const signInWithPassword = vi.fn().mockResolvedValue({
-      data: { user: { id: studentId, email: "test@ashoka.edu.in", email_confirmed_at: "confirmed" } }, error: null,
+      data: { user: { id: studentId, email: "reviewer@example.com", email_confirmed_at: "confirmed" } }, error: null,
     });
     userDb.mockResolvedValue({ auth: { signInWithPassword, signOut: vi.fn() }, from: vi.fn().mockReturnValue(query) });
     const form = new FormData();
-    form.set("email", "test@ashoka.edu.in");
+    form.set("email", "reviewer@example.com");
     form.set("password", "correct-horse-battery");
+    form.set("role", "reviewer");
     await expect(signInPassword({}, form)).rejects.toThrow("redirect:/reviewer");
-    expect(signInWithPassword).toHaveBeenCalledWith({ email: "test@ashoka.edu.in", password: "correct-horse-battery" });
-  });
-
-  it("keeps student account creation disabled", async () => {
-    const form = new FormData();
-    form.set("email", "student@ashoka.edu.in");
-    form.set("password", "correct-horse-battery");
-    form.set("confirm_password", "correct-horse-battery");
-    expect(await signUpPassword({}, form)).toEqual({
-      error: "Account creation is disabled. Contact an authorized E-Club reviewer for access.",
-    });
-    expect(userDb).not.toHaveBeenCalled();
-    expect(serviceDb).not.toHaveBeenCalled();
+    expect(signInWithPassword).toHaveBeenCalledWith({ email: "reviewer@example.com", password: "correct-horse-battery" });
   });
 
   it("keeps demo requests away from authentication, storage, export and the worker even with credentials configured", async () => {
@@ -120,12 +154,14 @@ describe("server guards", () => {
 
   it("routes an authenticated applicant away from reviewer pages", async () => {
     claim("applicant");
-    await expect(requireSession("reviewer")).rejects.toThrow("redirect:/sign-in");
+    await expect(requireSession("reviewer")).rejects.toThrow("redirect:/projects");
   });
 
-  it("requires a confirmed campus email even if a profile exists", async () => {
+  it("allows external confirmed reviewers but keeps applicants campus-only", async () => {
     claim("reviewer", "person@elsewhere.invalid");
-    await expect(requireSession("reviewer")).rejects.toThrow("redirect:/sign-in");
+    await expect(requireSession("reviewer")).resolves.toMatchObject({ profile: { role: "reviewer" } });
+    claim("applicant", "person@elsewhere.invalid");
+    await expect(requireSession("applicant")).rejects.toThrow("redirect:/applicant/login");
     claim("reviewer", "test@ashoka.edu.in", false);
     await expect(requireSession("reviewer")).rejects.toThrow("redirect:/sign-in");
   });
@@ -167,8 +203,8 @@ describe("same-origin request guard", () => {
 });
 
 describe("reviewer-only resume import", () => {
-  it("rejects the retired student upload endpoints", async () => {
-    claim("applicant");
+  it("rejects reviewers from the applicant upload endpoints", async () => {
+    claim("reviewer");
     expect((await start(post("/api/uploads/start", { projectId, size: 200, mediaType: "application/pdf" }))).status).toBe(403);
     expect((await submit(post("/api/uploads/submit", {}))).status).toBe(403);
     expect(serviceDb).not.toHaveBeenCalled();

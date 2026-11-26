@@ -8,5 +8,5 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   if (demoEnabled()) redirect("/demo");
   const current = await session();
-  redirect(current ? homeFor(current.profile.role) : "/sign-in");
+  redirect(current ? homeFor(current.profile.role) : "/applicant/login");
 }

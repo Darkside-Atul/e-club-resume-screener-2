@@ -59,7 +59,13 @@ export function ApplicationForm({ projectId, questions, previous, maxBytes }: {
       if (!canReuse) {
         setProgress("Uploading resume…");
         const { path, token } = await post("/api/uploads/start", { projectId, size: file.size, mediaType: "application/pdf" });
-        const storage = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!, {
+        const newStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL_2 || process.env.SUPABASE_NEW_SUPABASE_URL_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL || process.env.SUPABASE_NEW_SUPABASE_URL;
+        const storageUrl = newStorageUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const storageKey = newStorageUrl
+          ? process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY_2 || process.env.SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 || process.env.SUPABASE_NEW_SUPABASE_ANON_KEY_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY
+          : process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+        if (!storageUrl || !storageKey) throw new Error("Private storage is not configured.");
+        const storage = createClient(storageUrl, storageKey, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
         }).storage;
         const { error: uploadError } = await storage.from("resumes").uploadToSignedUrl(path, token, file, {
