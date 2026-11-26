@@ -42,8 +42,11 @@ export function InternalImport({ projectId, maxFileBytes }: { projectId: string;
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ projectId, size: file.size, mediaType: "application/pdf" }),
     }));
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    const newUrl = process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL_2 || process.env.SUPABASE_NEW_SUPABASE_URL_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_URL || process.env.SUPABASE_NEW_SUPABASE_URL;
+    const url = newUrl || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = newUrl
+      ? process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY_2 || process.env.SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY_2 || process.env.SUPABASE_NEW_SUPABASE_ANON_KEY_2 || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_NEW_SUPABASE_ANON_KEY
+      : process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !key) throw new Error("Private storage is not configured.");
     const storage = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }).storage;
     const { error: uploadError } = await storage.from("resumes").uploadToSignedUrl(signed.path, signed.token, file, {
